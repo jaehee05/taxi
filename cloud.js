@@ -31,7 +31,7 @@ try {
   } = authMod;
   const {
     initializeFirestore, persistentLocalCache, persistentSingleTabManager,
-    collection, doc, setDoc, addDoc, deleteDoc, updateDoc, getDoc, getDocs,
+    collection, doc, setDoc, addDoc, deleteDoc, updateDoc, getDoc, getDocs, writeBatch,
     onSnapshot, query, orderBy, serverTimestamp,
   } = fsMod;
 
@@ -93,6 +93,20 @@ try {
       const u = auth.currentUser;
       if (!u) throw new Error('not signed in');
       await deleteDoc(doc(db, 'users', u.uid, 'trips', id));
+    },
+
+    // 서버에 있는 운행 기록을 전부 지운다. 배치 상한(500)에 맞춰 나눠 보낸다.
+    async deleteAllTrips() {
+      const u = auth.currentUser;
+      if (!u) throw new Error('not signed in');
+      const snap = await getDocs(tripsRef(u.uid));
+      const docs = snap.docs;
+      for (let i = 0; i < docs.length; i += 400) {
+        const batch = writeBatch(db);
+        for (const d of docs.slice(i, i + 400)) batch.delete(d.ref);
+        await batch.commit();
+      }
+      return docs.length;
     },
 
     // 영수증을 공개 문서로 발행하고 공유용 아이디를 돌려준다

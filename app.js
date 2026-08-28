@@ -761,10 +761,40 @@ $('l_close').onclick = () => { $('ledgerOverlay').hidden = true; };
 $('s_link').onclick = linkGoogle;
 $('s_unlink').onclick = async () => { await window.cloud.signOutCloud(); flash($('s_unlink'), '연결 해제됨'); };
 $('h_close').onclick = () => { $('historyOverlay').hidden = true; };
-$('h_clear').onclick = () => {
+// 한 번 더 눌러야 지워진다. 브라우저 확인창 대신 버튼 자체로 되묻는다.
+let clearArmed = 0;
+$('h_clear').onclick = async () => {
+  const btn = $('h_clear');
   if (!trips.length) return;
-  if (confirm('운행 기록을 전부 지울까요? 누적 미수금도 사라집니다.')) {
-    trips = []; saveTrips(); renderHistory(); render();
+
+  if (Date.now() - clearArmed > 4000) {
+    clearArmed = Date.now();
+    btn.textContent = '정말 지울까요?';
+    setTimeout(() => {
+      if (Date.now() - clearArmed >= 4000) btn.textContent = '전체 삭제';
+    }, 4000);
+    return;
+  }
+  clearArmed = 0;
+  btn.textContent = '전체 삭제';
+
+  const gone = trips;
+  trips = [];
+  refreshLists();
+
+  if (!cloudOn) { saveTrips(); return; }
+
+  // 서버까지 지우지 않으면 다음 운행을 추가하는 순간 스냅샷이 전부 되살린다
+  gone.forEach((t) => { if (t.id) deleting.add(t.id); });
+  try {
+    await window.cloud.deleteAllTrips();
+  } catch (e) {
+    trips = gone;
+    refreshLists();
+    flash(btn, '삭제 실패');
+    alertOnce('전체 삭제 실패: ' + (e.code || e.message));
+  } finally {
+    gone.forEach((t) => { if (t.id) deleting.delete(t.id); });
   }
 };
 
