@@ -57,7 +57,8 @@
   <button class="go" id="go">운행 시작</button>
 
   <footer class="bottombar">
-    <button class="link" id="openHistory">운행 기록</button>
+    <button class="link" id="openHistory">기록</button>
+    <button class="link" id="openLedger">장부</button>
     <span class="owed" id="owed"></span>
     <button class="link" id="openSettings">설정</button>
   </footer>
@@ -71,6 +72,10 @@
       <div class="r-title">택 시 영 수 증</div>
       <div class="r-sub" id="rCompany">개인택시 · 차량번호 서울 12가 3456</div>
     </div>
+    <div class="r-guest">
+      <span class="r-guest-label">손님</span>
+      <div class="r-guest-chips" id="rGuests"></div>
+    </div>
     <div class="r-rows" id="rRows"></div>
     <div class="r-total">
       <span>합 계</span>
@@ -81,7 +86,10 @@
       <button class="btn ghost" id="rClose">닫기</button>
       <button class="btn" id="rShare">이미지로 보내기</button>
     </div>
-    <button class="r-alt" id="rText">텍스트로 복사</button>
+    <div class="r-alts">
+      <button class="r-alt" id="rLink">링크로 보내기</button>
+      <button class="r-alt" id="rText">텍스트로 복사</button>
+    </div>
   </div>
 </div>
 
@@ -99,14 +107,30 @@
     <label>거리요금 단위 (m당)<input type="number" id="s_unitDist" min="1" step="1"></label>
     <label>시간요금 단위 (초당)<input type="number" id="s_unitTime" min="1" step="1"></label>
     <label>단위요금 (원)<input type="number" id="s_unitFare" min="0" step="10"></label>
-    <label>시간요금 적용 속도 (km/h 미만)<input type="number" id="s_slowSpeed" min="0" step="0.01"></label>
     <label>시계외 할증률 (%)<input type="number" id="s_outPct" min="0" step="5"></label>
+    <p class="derived" id="s_derived"></p>
     <label class="row"><input type="checkbox" id="s_night"> <span id="s_nightDesc">심야할증 자동 적용</span></label>
     <label class="row"><input type="checkbox" id="s_autoOut"> <span id="s_autoOutDesc">시계외 자동 판정</span></label>
     <label class="row"><input type="checkbox" id="s_sim"> 시뮬레이션 모드 (GPS 없이 가상 주행)</label>
+    <div class="cloud" id="s_cloud"></div>
+    <button class="btn wide ghost" id="s_link">구글 계정 연결</button>
+    <button class="btn wide ghost" id="s_unlink" hidden>계정 연결 해제</button>
+
     <div class="sheet-actions">
       <button class="btn ghost" id="s_reset">기본값 복원</button>
       <button class="btn" id="s_close">저장하고 닫기</button>
+    </div>
+  </div>
+</div>
+
+<!-- 미수금 장부 -->
+<div class="overlay" id="ledgerOverlay" hidden>
+  <div class="sheet">
+    <h2>미수금 장부</h2>
+    <p class="sheet-desc" id="ledgerTotal"></p>
+    <div id="ledgerList" class="history"></div>
+    <div class="sheet-actions">
+      <button class="btn" id="l_close">닫기</button>
     </div>
   </div>
 </div>
@@ -123,6 +147,9 @@
   </div>
 </div>
 
+<script src="firebase-config.js"></script>
+<script src="receipt.js"></script>
 <script src="app.js"></script>
+<script type="module" src="cloud.js"></script>
 </body>
 </html>

@@ -129,6 +129,7 @@ body{
 }
 .sheet input:focus{outline:none;border-color:var(--amber-dim)}
 .sheet input[type=checkbox]{width:18px;height:18px;accent-color:var(--amber)}
+.derived{font-size:11px;color:var(--muted);line-height:1.6;padding:10px 0 2px}
 .sheet-actions,.r-actions{display:flex;gap:10px;margin-top:18px}
 .btn{
   flex:1;padding:14px;border:none;border-radius:12px;background:var(--amber);color:#1a1200;
@@ -173,3 +174,68 @@ body{
 .trip-fare{font-family:ui-monospace,Menlo,monospace;font-size:16px;font-weight:700;color:var(--amber);white-space:nowrap}
 .empty{text-align:center;color:var(--muted);font-size:13px;padding:26px 0}
 .tag{font-size:10px;font-weight:700;color:var(--amber);background:rgba(255,176,32,.12);border-radius:5px;padding:2px 5px;vertical-align:middle}
+
+/* 손님 지정 (영수증) */
+.r-guest{display:flex;align-items:center;gap:10px;padding:12px 0 2px;border-bottom:1px dashed #d9d2c0}
+.r-guest-label{font-size:12px;color:#7a7466;flex:none}
+.r-guest-chips{display:flex;flex-wrap:wrap;gap:5px;padding-bottom:10px}
+.chip{
+  padding:6px 11px;border-radius:999px;border:1px solid #d4ccb8;background:#ece6d6;
+  color:#5f5a4e;font-size:12px;font-weight:700;font-family:inherit;cursor:pointer;
+}
+.chip.on{background:#22201c;border-color:#22201c;color:#f6f3ea}
+.chip.add{background:none;border-style:dashed}
+.guest-input{
+  width:100%;padding:8px 11px;border-radius:9px;margin-bottom:10px;
+  border:1px solid #d4ccb8;background:#fff;color:#22201c;font-size:13px;font-family:inherit;
+}
+.guest-input:focus{outline:none;border-color:#22201c}
+
+.r-alts{display:flex;gap:8px;margin-top:8px}
+.r-alts .r-alt{flex:1;margin-top:0}
+
+/* 클라우드 상태 (설정) */
+.cloud{
+  display:flex;flex-direction:column;gap:3px;margin-top:16px;padding:12px 14px;
+  background:var(--panel-2);border:1px solid var(--line);border-radius:11px;
+}
+.cloud b{font-size:13px;color:var(--text)}
+.cloud b.on{color:var(--green)}
+.cloud b.off{color:var(--red)}
+.cloud span{font-size:11px;color:var(--muted);line-height:1.5}
+.btn.wide{width:100%;flex:none;margin-top:8px;padding:12px;font-size:13px}
+
+/* 미수금 장부 */
+.ldg{background:var(--panel-2);border:1px solid var(--line);border-radius:11px;overflow:hidden}
+.ldg.open{border-color:var(--amber-dim)}
+.ldg-head{
+  width:100%;display:flex;align-items:center;justify-content:space-between;gap:10px;
+  padding:13px 14px;border:none;background:none;color:var(--text);
+  font-family:inherit;cursor:pointer;text-align:left;
+}
+.ldg-name{font-size:14px;font-weight:700;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ldg-sum{display:flex;align-items:baseline;gap:8px;flex:none}
+.ldg-sum b{font-family:ui-monospace,Menlo,monospace;font-size:15px;color:var(--amber)}
+.ldg-sum i{font-style:normal;font-size:12px;color:var(--green)}
+.ldg-sum em{font-style:normal;font-size:11px;color:var(--muted)}
+.ldg-trips{padding:0 10px 10px;display:flex;flex-direction:column;gap:4px}
+.ldg-trip{display:flex;align-items:center;gap:10px;padding:8px 6px;border-top:1px solid var(--line)}
+.ldg-trip.done .ldg-when,.ldg-trip.done .ldg-fare{color:#5a606e;text-decoration:line-through}
+.ldg-chk{
+  flex:none;width:22px;height:22px;border-radius:6px;border:1px solid var(--line);
+  background:var(--panel);color:var(--green);font-size:13px;font-weight:800;
+  font-family:inherit;cursor:pointer;line-height:1;
+}
+.ldg-trip.done .ldg-chk{background:rgba(46,224,122,.14);border-color:var(--green)}
+.ldg-when{flex:1;font-size:12px;color:var(--muted);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ldg-fare{flex:none;font-family:ui-monospace,Menlo,monospace;font-size:13px;font-weight:700}
+
+/* 공개 영수증 페이지 */
+.pub{
+  min-height:100dvh;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;
+  padding:calc(env(safe-area-inset-top) + 24px) 18px calc(env(safe-area-inset-bottom) + 24px);
+}
+.pub .receipt{max-width:430px}
+.pub-msg{color:var(--muted);font-size:14px;text-align:center;line-height:1.6}
+.pub-foot{color:var(--amber-dim);font-size:13px;font-weight:700;text-decoration:none}
+.pub-foot:active{color:var(--amber)}

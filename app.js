@@ -7,7 +7,7 @@ const REGIONS = {
   seongnam: {
     label: '성남 · 분당',
     plate: '경기 34바 5678',
-    fare: { base: 4800, baseDist: 2000, unitDist: 132, unitTime: 31, unitFare: 100, slowSpeed: 15.33, outPct: 20 },
+    fare: { base: 4800, baseDist: 2000, unitDist: 132, unitTime: 31, unitFare: 100, outPct: 20 },
     night: [[0, 4, 20]],
     bounds: [
       [37.500, 127.100], [37.495, 127.135], [37.485, 127.160], [37.470, 127.185],
@@ -20,7 +20,7 @@ const REGIONS = {
   seoul: {
     label: '서울',
     plate: '서울 12가 3456',
-    fare: { base: 4800, baseDist: 1600, unitDist: 131, unitTime: 30, unitFare: 100, slowSpeed: 15.33, outPct: 20 },
+    fare: { base: 4800, baseDist: 1600, unitDist: 131, unitTime: 30, unitFare: 100, outPct: 20 },
     night: [[22, 23, 20], [23, 2, 40], [2, 4, 20]],
     bounds: [
       [37.701, 127.045], [37.690, 127.090], [37.660, 127.110], [37.640, 127.140],
@@ -53,10 +53,11 @@ const S = {
   running: false,
   startedAt: 0,
   endedAt: 0,
-  dist: 0,          // 총 주행거리 (m)
-  distOut: 0,       // 시계외 주행거리 (m)
-  unitsIn: 0,       // 시내 구간 누적 단위 (소수)
-  unitsOut: 0,      // 시계외 구간 누적 단위 (소수)
+  dist: 0,          // 실제 주행거리 (m) — 표시·영수증용
+  distOut: 0,       // 시계외 실제 주행거리 (m)
+  eff: 0,           // 효과거리 (m) — 실제 거리 + 저속/정차 시간의 거리 환산분
+  effCharged: 0,    // 기본거리를 넘어선 효과거리 (요금이 붙는 구간)
+  effOut: 0,        // 그중 시계외에서 쌓인 몫
   outside: false,   // 현재 시계외 여부
   manualOut: false, // 사용자가 직접 조작 → 자동 판정 중단
   speed: 0,         // 현재 속도 (km/h)
@@ -92,6 +93,65 @@ function loadTrips() {
 }
 function saveTrips() { localStorage.setItem(LS_TRIPS, JSON.stringify(trips.slice(0, 50))); }
 
+/* ---------- 클라우드 ---------- */
+let cloudOn = false;
+
+function refreshLists() {
+  if (!$('historyOverlay').hidden) renderHistory();
+  if (!$('ledgerOverlay').hidden) renderLedger();
+  render();
+}
+
+window.addEventListener('cloud-ready', (e) => {
+  const c = e.detail;
+  renderCloudStatus();
+  if (!c.available) return;
+  cloudOn = true;
+  c.onTrips((list) => { trips = list; refreshLists(); });
+  migrateLocalTrips();
+});
+window.addEventListener('cloud-auth', renderCloudStatus);
+
+// 브라우저에만 있던 기존 기록을 한 번만 클라우드로 올린다
+async function migrateLocalTrips() {
+  if (localStorage.getItem('taxi.migrated')) return;
+  const local = loadTrips();
+  localStorage.setItem('taxi.migrated', '1');
+  for (const t of local) {
+    try { await window.cloud.addTrip(t); } catch { /* 실패해도 로컬본은 남아 있다 */ }
+  }
+}
+
+function renderCloudStatus() {
+  const box = $('s_cloud');
+  if (!box) return;
+  const c = window.cloud;
+  if (!c || !c.available) {
+    box.innerHTML = '<b class="off">클라우드 미연결</b><span>이 브라우저에만 기록이 저장됩니다</span>';
+    return;
+  }
+  const u = c.user;
+  if (u && !u.isAnonymous) {
+    box.innerHTML = `<b class="on">${esc(u.email || '구글 계정')} 연결됨</b><span>다른 기기에서도 같은 기록이 보입니다</span>`;
+  } else {
+    box.innerHTML = '<b>이 기기에만 연결됨</b><span>구글 계정을 연결하면 폰·PC에서 같은 기록을 씁니다</span>';
+  }
+  $('s_link').hidden = !!(u && !u.isAnonymous);
+  $('s_unlink').hidden = !(u && !u.isAnonymous);
+}
+
+async function linkGoogle() {
+  const btn = $('s_link');
+  try {
+    const { merged } = await window.cloud.linkGoogle();
+    flash(btn, merged ? '연결됨!' : '계정 전환됨');
+  } catch (e) {
+    if (e.code === 'auth/popup-closed-by-user') return;
+    flash(btn, '연결 실패');
+    console.warn('[cloud] 구글 연결 실패:', e.code || e.message);
+  }
+}
+
 /* ---------- 요금 계산 ---------- */
 function region() { return REGIONS[rates.region] || REGIONS[DEFAULT_REGION]; }
 
@@ -105,13 +165,19 @@ function surchargePct(d = new Date()) {
   }
   return 0;
 }
-// 미터요금: 기본요금 + 누적 단위 × 단위요금 (시내·시계외 합산)
+// 시간요금이 붙기 시작하는 속도. 단위요금이 같은 이상 거리 단가와 시간 단가는
+// 같은 지점에서 만나므로, 별도 설정값이 아니라 두 단위에서 유도된다.
+// 예: 132m / 31초 = 4.26m/s = 15.33km/h
+function mps() { return rates.unitDist / rates.unitTime; }
+function slowSpeed() { return mps() * 3.6; }
+
+// 미터요금: 기본요금 + 기본거리 초과 효과거리를 단위로 나눈 만큼
 function meteredFare() {
-  return rates.base + Math.floor(S.unitsIn + S.unitsOut) * rates.unitFare;
+  return rates.base + Math.floor(S.effCharged / rates.unitDist) * rates.unitFare;
 }
-// 시계외 할증: 시계외 구간에서 오른 요금에만 적용
+// 시계외 할증: 시계외에서 쌓인 효과거리에 해당하는 요금에만 적용
 function outFare() {
-  return Math.floor(S.unitsOut) * rates.unitFare * (rates.outPct / 100);
+  return Math.floor(S.effOut / rates.unitDist) * rates.unitFare * (rates.outPct / 100);
 }
 // 최종 요금: (미터요금 + 시계외할증)에 심야할증을 곱하고 100원 단위 반올림
 function totalFare(pct = surchargePct()) {
@@ -127,20 +193,28 @@ function haversine(a, b) {
   return 2 * R * Math.asin(Math.sqrt(s));
 }
 
-// 현재 구간(시내/시계외)에 단위 적립
-function addUnits(u) {
-  if (S.outside) S.unitsOut += u; else S.unitsIn += u;
+/* 효과거리를 쌓는다. 기본거리를 넘어선 몫만 요금이 붙고,
+   그 몫이 시계외에서 쌓였으면 할증 대상으로 따로 센다. */
+function addEff(de) {
+  if (!(de > 0)) return;
+  const before = S.eff;
+  S.eff += de;
+  const chargeable = S.eff - Math.max(before, rates.baseDist);
+  if (chargeable <= 0) return;
+  S.effCharged += chargeable;
+  if (S.outside) S.effOut += chargeable;
 }
 
-// 거리 누적 + 기본거리 초과분에 대해 거리요금 단위 적립
+// 실제 주행거리. 기준속도 이상이면 거리가 그대로 효과거리가 된다.
 function addDistance(dd, speedKmh) {
   if (!(dd > 0)) return;
   S.dist += dd;
   if (S.outside) S.distOut += dd;
-  if (S.dist <= rates.baseDist) return;
-  const chargeable = Math.min(dd, S.dist - rates.baseDist);
-  if (speedKmh >= rates.slowSpeed) addUnits(chargeable / rates.unitDist);
+  if (speedKmh >= slowSpeed()) addEff(dd);
 }
+
+// 기본거리에서 아직 남은 양 (실제 미터기가 1600부터 깎아 내려가는 그 숫자)
+function baseLeft() { return Math.max(0, rates.baseDist - S.eff); }
 
 /* ---------- 시계외 판정 ---------- */
 // 현재 지역의 시 경계 안에 있는지 (ray casting)
@@ -239,26 +313,34 @@ function tick() {
   if (S.running) {
     // GPS가 5초 이상 조용하면 정차로 간주
     if (!rates.sim && now - S.lastFixAt > 5000) S.speed = 0;
-    // 기본거리 소진 후, 저속/정차 중이면 시간요금 적립
-    if (S.dist > rates.baseDist && S.speed < rates.slowSpeed && dt > 0) {
-      addUnits(dt / rates.unitTime);
-    }
+    // 기준속도 미만이면 흐른 시간을 거리로 환산해 적립한다.
+    // 기본거리 구간에서도 똑같이 깎이므로, 멈춰 있어도 미터는 진행된다.
+    if (S.speed < slowSpeed() && dt > 0) addEff(dt * mps());
   }
   render();
 }
 
 /* ---------- 렌더 ---------- */
-function fmtTime(sec) {
-  sec = Math.max(0, Math.floor(sec));
-  const h = Math.floor(sec / 3600), m = Math.floor(sec % 3600 / 60), s = sec % 60;
-  const p = (n) => String(n).padStart(2, '0');
-  return h ? `${h}:${p(m)}:${p(s)}` : `${p(m)}:${p(s)}`;
-}
-const won = (n) => n.toLocaleString('ko-KR');
 
 function elapsed() {
   if (!S.startedAt) return 0;
   return ((S.running ? Date.now() : S.endedAt) - S.startedAt) / 1000;
+}
+
+// 실제 미터기처럼 다음 100원이 오르기까지 남은 양을 보여 준다
+function hintText() {
+  if (!S.running) {
+    return S.startedAt ? '운행 종료'
+      : `기본요금 ${won(rates.base)}원 · 기본거리 ${(rates.baseDist / 1000).toFixed(1)}km`;
+  }
+  const slow = S.speed < slowSpeed();
+  const mark = slow ? '⏱' : '📍';
+  if (baseLeft() > 0) {
+    return `${mark} 기본거리 ${Math.ceil(baseLeft())}m 남음`;
+  }
+  // 다음 100원이 오르기까지 남은 효과거리
+  const left = rates.unitDist - (S.effCharged % rates.unitDist);
+  return `${mark} 다음 ${won(rates.unitFare)}원까지 ${Math.ceil(left)}m`;
 }
 
 function render() {
@@ -277,19 +359,10 @@ function render() {
     ? `시계외 ${(S.distOut / 1000).toFixed(2)}km 주행중`
     : (rates.autoOut && !S.manualOut ? `${region().label.split(' · ')[0]}시 경계 자동 판정중` : '');
 
-  if (!S.running) {
-    el.hint.textContent = S.startedAt ? '운행 종료' : `기본요금 ${won(rates.base)}원 · 기본거리 ${(rates.baseDist / 1000).toFixed(1)}km`;
-  } else if (S.dist <= rates.baseDist) {
-    const left = (rates.baseDist - S.dist) / 1000;
-    el.hint.textContent = `기본요금 구간 · ${left.toFixed(2)}km 남음`;
-  } else if (S.speed < rates.slowSpeed) {
-    el.hint.textContent = `⏱ 시간요금 적용중 (${rates.unitTime}초당 ${won(rates.unitFare)}원)`;
-  } else {
-    el.hint.textContent = `📍 거리요금 적용중 (${rates.unitDist}m당 ${won(rates.unitFare)}원)`;
-  }
+  el.hint.textContent = hintText();
 
-  const owed = trips.reduce((a, t) => a + t.fare, 0);
-  el.owed.textContent = trips.length ? `누적 미수금 ${won(owed)}원` : '';
+  const owed = trips.reduce((a, t) => a + (t.settled ? 0 : t.fare), 0);
+  el.owed.textContent = owed ? `누적 미수금 ${won(owed)}원` : '';
 }
 
 /* ---------- 운행 ---------- */
@@ -297,7 +370,7 @@ async function start() {
   S.running = true;
   S.startedAt = Date.now();
   S.endedAt = 0;
-  S.dist = 0; S.distOut = 0; S.unitsIn = 0; S.unitsOut = 0;
+  S.dist = 0; S.distOut = 0; S.eff = 0; S.effCharged = 0; S.effOut = 0;
   S.outside = false; S.manualOut = false;
   S.speed = 0; S.lastFix = null; S.lastFixAt = Date.now();
   lastTick = 0;
@@ -339,10 +412,24 @@ function stop() {
     surcharge: pct,
     fare: totalFare(pct),
   };
-  trips.unshift(trip);
-  saveTrips();
+  persistTrip(trip);
   showReceipt(trip);
   render();
+}
+
+// 클라우드가 붙어 있으면 그쪽에 쓰고 목록은 스냅샷이 갱신한다
+function persistTrip(trip) {
+  if (!cloudOn) { trips.unshift(trip); saveTrips(); refreshLists(); return; }
+  window.cloud.addTrip(trip)
+    .then((id) => { trip.id = id; })
+    .catch(() => { trips.unshift(trip); saveTrips(); refreshLists(); });
+}
+
+function patchTrip(trip, patch) {
+  Object.assign(trip, patch);
+  if (cloudOn && trip.id) window.cloud.updateTrip(trip.id, patch).catch(() => {});
+  else saveTrips();
+  refreshLists();
 }
 
 /* ---------- 화면 꺼짐 방지 ---------- */
@@ -359,49 +446,82 @@ document.addEventListener('visibilitychange', () => {
 });
 
 /* ---------- 영수증 ---------- */
-function tripRows(t) {
-  const d = (ts) => new Date(ts).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' });
-  const rows = [
-    ['승차', d(t.startedAt)],
-    ['하차', d(t.endedAt)],
-    ['주행거리', (t.dist / 1000).toFixed(2) + ' km'],
-    ['주행시간', fmtTime(t.sec)],
-    ['미터요금', won(t.metered) + '원'],
-  ];
-  if (t.outFare) {
-    rows.push([`시계외 할증 (${(t.distOut / 1000).toFixed(2)}km)`, `+${won(t.outFare)}원`]);
-  }
-  if (t.surcharge) rows.push(['심야할증', `+${t.surcharge}%`]);
-  return rows;
-}
-function receiptSubtitle(t) {
-  return new Date(t.startedAt).toLocaleDateString('ko-KR') + ' · 개인택시 ' + (t.plate || region().plate);
-}
-function showReceipt(t) {
+function renderReceiptRows(t) {
   $('rRows').innerHTML = tripRows(t)
     .map(([k, v]) => `<div class="r-row"><span>${esc(k)}</span><span>${esc(v)}</span></div>`)
     .join('');
   $('rTotal').textContent = won(t.fare) + '원';
   $('rCompany').textContent = receiptSubtitle(t);
+}
+
+function showReceipt(t) {
+  renderReceiptRows(t);
+  renderGuestPicker(t);
   $('receiptOverlay').hidden = false;
   $('rShare').onclick = () => shareTripImage(t);
   $('rText').onclick = () => copyTripText(t);
+  $('rLink').onclick = () => shareTripLink(t);
+  $('rLink').hidden = !cloudOn;
   prepareImage(t);
 }
-function esc(s) {
-  return String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+/* ---------- 손님 지정 ---------- */
+// 지금까지 쓴 이름을 최근 순으로 모은다
+function knownGuests() {
+  const seen = [];
+  for (const t of trips) {
+    if (t.passenger && !seen.includes(t.passenger)) seen.push(t.passenger);
+  }
+  return seen.slice(0, 8);
 }
-function receiptText(t) {
-  const lines = [
-    '🚕 택시 영수증',
-    '─────────────',
-    ...tripRows(t).map(([k, v]) => `${k}: ${v}`),
-    '─────────────',
-    `합계: ${won(t.fare)}원`,
-    '',
-    '※ 현금·카드 결제 불가, 밥으로만 결제 가능합니다 🍚',
-  ];
-  return lines.join('\n');
+
+function renderGuestPicker(t) {
+  const box = $('rGuests');
+  const chips = knownGuests().map((n) =>
+    `<button class="chip${n === t.passenger ? ' on' : ''}" data-guest="${esc(n)}">${esc(n)}</button>`);
+  chips.push('<button class="chip add" data-guest-new>+ 이름</button>');
+  box.innerHTML = chips.join('');
+
+  box.querySelectorAll('[data-guest]').forEach((b) => {
+    b.onclick = () => setGuest(t, b.dataset.guest === t.passenger ? null : b.dataset.guest);
+  });
+  box.querySelector('[data-guest-new]').onclick = () => {
+    box.innerHTML = '<input class="guest-input" id="rGuestInput" maxlength="12" placeholder="이름 입력 후 Enter" autocomplete="off">';
+    const inp = $('rGuestInput');
+    inp.focus();
+    inp.onkeydown = (e) => {
+      if (e.key === 'Enter') setGuest(t, inp.value.trim() || null);
+      if (e.key === 'Escape') renderGuestPicker(t);
+    };
+    inp.onblur = () => { if (inp.value.trim()) setGuest(t, inp.value.trim()); else renderGuestPicker(t); };
+  };
+}
+
+function setGuest(t, name) {
+  patchTrip(t, { passenger: name });
+  renderReceiptRows(t);
+  renderGuestPicker(t);
+  prepareImage(t);          // 이름이 영수증에 들어가므로 이미지를 다시 만든다
+}
+
+/* ---------- 공유 링크 ---------- */
+async function shareTripLink(t) {
+  const btn = $('rLink');
+  try {
+    if (!t.shareId) {
+      t.shareId = await window.cloud.publishReceipt(t);
+    }
+    const url = `${location.origin}/r/${t.shareId}`;
+    if (navigator.share) {
+      try { await navigator.share({ title: '택시 영수증', url }); return; }
+      catch (e) { if (e.name === 'AbortError') return; }
+    }
+    await navigator.clipboard.writeText(url);
+    flash(btn, '링크 복사됨!');
+  } catch (e) {
+    flash(btn, '발행 실패');
+    console.warn('[cloud] 영수증 발행 실패:', e.code || e.message);
+  }
 }
 async function copyTripText(t) {
   const text = receiptText(t);
@@ -411,100 +531,6 @@ async function copyTripText(t) {
   } catch {
     if (navigator.share) { try { await navigator.share({ title: '택시 영수증', text }); } catch {} }
   }
-}
-
-/* ---------- 영수증 이미지 ---------- */
-const KR = '"Apple SD Gothic Neo", -apple-system, system-ui, sans-serif';
-const MONO = 'ui-monospace, Menlo, monospace';
-const IMG_W = 640;   // 논리 폭 (실제 PNG는 2배)
-
-function dashLine(ctx, y, w, pad) {
-  ctx.save();
-  ctx.strokeStyle = '#c9c2b0';
-  ctx.lineWidth = 2;
-  ctx.setLineDash([6, 6]);
-  ctx.beginPath();
-  ctx.moveTo(pad, y);
-  ctx.lineTo(w - pad, y);
-  ctx.stroke();
-  ctx.restore();
-}
-
-// 영수증을 캔버스에 직접 그린다 (외부 라이브러리 없이, 화면 디자인과 동일한 톤)
-function drawReceipt(t) {
-  const pad = 44, rows = tripRows(t);
-  // 높이를 먼저 계산해서 캔버스를 잡는다
-  const h = pad + 52 + 44 + 34 + 28 + rows.length * 34 + 4 + 26 + 46 + 30 + 52 + pad;
-  const dpr = 2;
-  const cv = document.createElement('canvas');
-  cv.width = IMG_W * dpr;
-  cv.height = h * dpr;
-  const ctx = cv.getContext('2d');
-  ctx.scale(dpr, dpr);
-
-  ctx.fillStyle = '#f6f3ea';
-  ctx.fillRect(0, 0, IMG_W, h);
-
-  const mid = IMG_W / 2;
-  let y = pad;
-
-  ctx.textAlign = 'center';
-  ctx.fillStyle = '#22201c';
-  ctx.font = `36px ${KR}`;
-  ctx.fillText('🚕', mid, y + 34);
-  y += 52;
-
-  ctx.font = `700 30px ${KR}`;
-  ctx.fillText('택 시 영 수 증', mid, y + 26);
-  y += 44;
-
-  ctx.font = `14px ${MONO}`;
-  ctx.fillStyle = '#7a7466';
-  ctx.fillText(receiptSubtitle(t), mid, y + 14);
-  y += 34;
-
-  dashLine(ctx, y, IMG_W, pad);
-  y += 28;
-
-  ctx.font = `17px ${MONO}`;
-  for (const [k, v] of rows) {
-    ctx.textAlign = 'left';
-    ctx.fillStyle = '#7a7466';
-    ctx.fillText(k, pad, y + 17);
-    ctx.textAlign = 'right';
-    ctx.fillStyle = '#22201c';
-    ctx.fillText(v, IMG_W - pad, y + 17);
-    y += 34;
-  }
-
-  y += 4;
-  dashLine(ctx, y, IMG_W, pad);
-  y += 26;
-
-  ctx.textAlign = 'left';
-  ctx.fillStyle = '#22201c';
-  ctx.font = `700 20px ${KR}`;
-  ctx.fillText('합 계', pad, y + 26);
-  ctx.textAlign = 'right';
-  ctx.font = `700 32px ${MONO}`;
-  ctx.fillText(won(t.fare) + '원', IMG_W - pad, y + 28);
-  y += 46;
-
-  dashLine(ctx, y, IMG_W, pad);
-  y += 30;
-
-  ctx.textAlign = 'center';
-  ctx.fillStyle = '#7a7466';
-  ctx.font = `14px ${KR}`;
-  ctx.fillText('※ 현금·카드 결제 불가', mid, y + 14);
-  ctx.fillText('밥으로만 결제 가능합니다 🍚', mid, y + 40);
-
-  return cv;
-}
-
-function receiptFileName(t) {
-  const d = new Date(t.startedAt), p = (n) => String(n).padStart(2, '0');
-  return `택시영수증_${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}_${p(d.getHours())}${p(d.getMinutes())}.png`;
 }
 
 // 공유는 사용자 제스처 안에서 즉시 호출돼야 하므로, 영수증을 열 때 미리 만들어 둔다
@@ -574,14 +600,74 @@ function renderHistory() {
   });
 }
 function deleteTrip(i) {
+  const t = trips[i];
+  if (cloudOn && t.id) {
+    window.cloud.deleteTrip(t.id).catch(() => {});
+    return;   // 스냅샷이 목록을 다시 그린다
+  }
   trips.splice(i, 1);
   saveTrips();
-  renderHistory();
-  render();
+  refreshLists();
+}
+
+/* ---------- 미수금 장부 ---------- */
+// 손님별로 묶어 미정산 금액이 큰 순으로 세운다
+function ledgerData() {
+  const map = new Map();
+  for (const t of trips) {
+    const key = t.passenger || '';
+    if (!map.has(key)) map.set(key, { name: key, trips: [], owed: 0, paid: 0 });
+    const e = map.get(key);
+    e.trips.push(t);
+    if (t.settled) e.paid += t.fare; else e.owed += t.fare;
+  }
+  return [...map.values()].sort((a, b) => b.owed - a.owed || b.paid - a.paid);
+}
+
+let openGuest = null;   // 펼쳐 놓은 손님
+
+function renderLedger() {
+  const list = $('ledgerList');
+  const data = ledgerData();
+  if (!data.length) { list.innerHTML = '<div class="empty">아직 태워준 사람이 없습니다</div>'; return; }
+
+  list.innerHTML = data.map((g) => {
+    const open = g.name === openGuest;
+    const rows = !open ? '' : `<div class="ldg-trips">${g.trips.map((t) => `
+      <div class="ldg-trip${t.settled ? ' done' : ''}">
+        <button class="ldg-chk" data-toggle="${esc(t.id || String(t.startedAt))}">${t.settled ? '✓' : ''}</button>
+        <span class="ldg-when">${esc(tripTitle(t))}</span>
+        <span class="ldg-fare">${won(t.fare)}원</span>
+      </div>`).join('')}</div>`;
+    return `
+      <div class="ldg${open ? ' open' : ''}">
+        <button class="ldg-head" data-guest="${esc(g.name)}">
+          <span class="ldg-name">${esc(g.name || '이름 없는 손님')}</span>
+          <span class="ldg-sum">
+            ${g.owed ? `<b>${won(g.owed)}원</b>` : '<i>정산 완료</i>'}
+            <em>${g.trips.length}건</em>
+          </span>
+        </button>
+        ${rows}
+      </div>`;
+  }).join('');
+
+  list.querySelectorAll('[data-guest]').forEach((b) => {
+    b.onclick = () => { openGuest = openGuest === b.dataset.guest ? null : b.dataset.guest; renderLedger(); };
+  });
+  list.querySelectorAll('[data-toggle]').forEach((b) => {
+    b.onclick = () => {
+      const t = trips.find((x) => (x.id || String(x.startedAt)) === b.dataset.toggle);
+      if (t) patchTrip(t, { settled: !t.settled });
+    };
+  });
+
+  const total = data.reduce((a, g) => a + g.owed, 0);
+  $('ledgerTotal').textContent = total ? `받을 돈 ${won(total)}원` : '받을 돈 없음';
 }
 
 /* ---------- 설정 ---------- */
-const FIELDS = ['base', 'baseDist', 'unitDist', 'unitTime', 'unitFare', 'slowSpeed', 'outPct'];
+const FIELDS = ['base', 'baseDist', 'unitDist', 'unitTime', 'unitFare', 'outPct'];
 function fillSettings() {
   FIELDS.forEach((k) => { $('s_' + k).value = rates[k]; });
   $('s_night').checked = !!rates.night;
@@ -593,6 +679,9 @@ function fillSettings() {
   $('s_nightDesc').textContent = '심야할증 자동 적용 (' + region().night
     .map(([f, t, p]) => `${f}~${t}시 ${p}%`).join(', ') + ')';
   $('s_autoOutDesc').textContent = `시계외 자동 판정 (${region().label.split(' · ')[0]}시 경계 · 대략)`;
+  $('s_derived').textContent =
+    `정차 시 ${mps().toFixed(2)}m/s 씩 소모 · 시간요금 전환 속도 ${slowSpeed().toFixed(2)}km/h ` +
+    `(${rates.unitDist}m ÷ ${rates.unitTime}초에서 유도)`;
 }
 
 // 지역을 고르면 해당 지역 요금표를 채워 넣는다 (숫자는 이후 직접 수정 가능)
@@ -629,6 +718,10 @@ document.querySelectorAll('.seg-btn').forEach((b) => {
 });
 
 $('openHistory').onclick = () => { renderHistory(); $('historyOverlay').hidden = false; };
+$('openLedger').onclick = () => { openGuest = null; renderLedger(); $('ledgerOverlay').hidden = false; };
+$('l_close').onclick = () => { $('ledgerOverlay').hidden = true; };
+$('s_link').onclick = linkGoogle;
+$('s_unlink').onclick = async () => { await window.cloud.signOutCloud(); flash($('s_unlink'), '연결 해제됨'); };
 $('h_close').onclick = () => { $('historyOverlay').hidden = true; };
 $('h_clear').onclick = () => {
   if (!trips.length) return;

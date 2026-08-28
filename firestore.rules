@@ -1,0 +1,70 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function owns(uid) {
+      return signedIn() && request.auth.uid == uid;
+    }
+
+    // 운행 기록에 들어올 수 있는 필드와 값의 범위를 못박는다.
+    // 로그인만 하면 누구나 자기 문서를 쓸 수 있으므로, 저장소로 악용되지 않도록
+    // 키 목록을 화이트리스트로 고정하고 숫자에도 상한을 둔다.
+    function validTrip(d) {
+      return d.keys().hasOnly([
+               'startedAt', 'endedAt', 'sec', 'dist', 'distOut',
+               'metered', 'outFare', 'outPct', 'surcharge', 'fare',
+               'region', 'plate', 'passenger', 'settled', 'createdAt'
+             ])
+             && d.keys().hasAll(['startedAt', 'endedAt', 'sec', 'dist', 'fare'])
+             && d.startedAt is number && d.startedAt > 0
+             && d.endedAt is number && d.endedAt >= d.startedAt
+             && d.sec is number && d.sec >= 0 && d.sec <= 86400
+             && d.dist is number && d.dist >= 0 && d.dist <= 2000000
+             && d.fare is number && d.fare >= 0 && d.fare <= 100000000
+             && (!('distOut' in d) || (d.distOut is number && d.distOut >= 0 && d.distOut <= d.dist))
+             && (!('metered' in d) || d.metered is number)
+             && (!('outFare' in d) || d.outFare is number)
+             && (!('outPct' in d) || d.outPct is number)
+             && (!('surcharge' in d) || d.surcharge is number)
+             && (!('region' in d) || (d.region is string && d.region.size() <= 20))
+             && (!('plate' in d) || (d.plate is string && d.plate.size() <= 30))
+             && (!('passenger' in d) || d.passenger == null ||
+                 (d.passenger is string && d.passenger.size() <= 20))
+             && (!('settled' in d) || d.settled is bool);
+    }
+
+    // 운행 기록 — 본인만 읽고 쓴다
+    match /users/{uid}/trips/{tripId} {
+      allow read: if owns(uid);
+      allow create: if owns(uid) && validTrip(request.resource.data);
+      // 승차 시각은 기록의 정체성이므로 수정으로 바꿔치기할 수 없게 고정
+      allow update: if owns(uid)
+                    && validTrip(request.resource.data)
+                    && request.resource.data.startedAt == resource.data.startedAt;
+      allow delete: if owns(uid);
+    }
+
+    // 공유 영수증 — 링크를 받은 사람은 읽을 수 있지만, 목록을 훑을 수는 없다
+    match /receipts/{receiptId} {
+      allow get: if true;
+      allow list: if false;
+      allow create: if signedIn()
+                    && request.resource.data.keys().hasOnly(['ownerUid', 'trip', 'createdAt'])
+                    && request.resource.data.ownerUid == request.auth.uid
+                    && validTrip(request.resource.data.trip);
+      // 한 번 발행한 영수증은 고쳐 쓸 수 없다. 지우는 것만 가능
+      allow update: if false;
+      allow delete: if signedIn() && resource.data.ownerUid == request.auth.uid;
+    }
+
+    // 그 밖의 모든 경로는 차단
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
