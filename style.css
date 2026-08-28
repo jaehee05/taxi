@@ -85,15 +85,6 @@ body{
 }
 .out-note{font-size:11px;color:var(--muted);min-height:14px}
 
-/* 손님 이름 */
-.passenger input{
-  width:100%;padding:13px 14px;border-radius:12px;
-  background:var(--panel);border:1px solid var(--line);color:var(--text);
-  font-size:15px;font-family:inherit;
-}
-.passenger input::placeholder{color:#5a606e}
-.passenger input:focus{outline:none;border-color:var(--amber-dim)}
-
 /* 버튼 */
 .go{
   width:100%;padding:19px;border:none;border-radius:16px;
@@ -153,7 +144,6 @@ body{
 .r-rows{padding:14px 0;font-size:13px}
 .r-row{display:flex;justify-content:space-between;gap:12px;padding:5px 0}
 .r-row span:first-child{color:#7a7466}
-.r-row.strong span:first-child{color:#22201c;font-weight:700}
 .r-total{
   display:flex;justify-content:space-between;align-items:baseline;
   padding:14px 0;border-top:2px dashed #c9c2b0;border-bottom:2px dashed #c9c2b0;
@@ -165,9 +155,15 @@ body{
 
 /* 기록 */
 .history{display:flex;flex-direction:column;gap:8px;max-height:46dvh;overflow-y:auto}
-.trip{background:var(--panel-2);border:1px solid var(--line);border-radius:11px;padding:12px 14px;display:flex;justify-content:space-between;align-items:center;gap:10px}
-.trip-l{min-width:0}
+.trip{background:var(--panel-2);border:1px solid var(--line);border-radius:11px;padding:12px 6px 12px 14px;display:flex;align-items:center;gap:10px}
+.trip-l{min-width:0;flex:1;cursor:pointer}
 .trip-name{font-size:14px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.trip-del{
+  flex:none;width:34px;height:34px;border:none;border-radius:9px;background:none;
+  color:#5a606e;font-size:19px;line-height:1;font-family:inherit;cursor:pointer;
+  transition:color .15s, background .15s;
+}
+.trip-del:hover,.trip-del:active{color:var(--red);background:rgba(255,77,77,.1)}
 .trip-meta{font-size:11px;color:var(--muted);margin-top:3px}
 .trip-fare{font-family:ui-monospace,Menlo,monospace;font-size:16px;font-weight:700;color:var(--amber);white-space:nowrap}
 .empty{text-align:center;color:var(--muted);font-size:13px;padding:26px 0}

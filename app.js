@@ -75,7 +75,7 @@ const el = {
   gpsBadge: $('gpsBadge'), scBadge: $('surchargeBadge'), scVal: $('surchargeVal'),
   fare: $('fare'), dist: $('dist'), time: $('time'), speed: $('speed'), hint: $('hint'),
   outBtn: $('outBtn'), outNote: $('outNote'),
-  go: $('go'), passenger: $('passenger'), passengerWrap: $('passengerWrap'), owed: $('owed'),
+  go: $('go'), owed: $('owed'),
 };
 
 /* ---------- 저장소 ---------- */
@@ -304,7 +304,6 @@ async function start() {
   el.go.classList.add('stop');
   el.lamp.classList.add('running');
   el.lampText.textContent = '주행중';
-  el.passengerWrap.hidden = true;
 
   if (rates.sim) startSim(); else startGPS();
   S.timer = setInterval(tick, 250);
@@ -323,11 +322,9 @@ function stop() {
   el.go.classList.remove('stop');
   el.lamp.classList.remove('running');
   el.lampText.textContent = '빈차';
-  el.passengerWrap.hidden = false;
 
   const pct = surchargePct(new Date(S.endedAt));
   const trip = {
-    name: (el.passenger.value || '').trim() || '이름 없는 손님',
     startedAt: S.startedAt,
     endedAt: S.endedAt,
     sec: Math.round((S.endedAt - S.startedAt) / 1000),
@@ -362,7 +359,6 @@ document.addEventListener('visibilitychange', () => {
 function tripRows(t) {
   const d = (ts) => new Date(ts).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' });
   const rows = [
-    ['손님', t.name],
     ['승차', d(t.startedAt)],
     ['하차', d(t.endedAt)],
     ['주행거리', (t.dist / 1000).toFixed(2) + ' km'],
@@ -377,7 +373,7 @@ function tripRows(t) {
 }
 function showReceipt(t) {
   $('rRows').innerHTML = tripRows(t)
-    .map(([k, v], i) => `<div class="r-row${i === 0 ? ' strong' : ''}"><span>${esc(k)}</span><span>${esc(v)}</span></div>`)
+    .map(([k, v]) => `<div class="r-row"><span>${esc(k)}</span><span>${esc(v)}</span></div>`)
     .join('');
   $('rTotal').textContent = won(t.fare) + '원';
   $('rCompany').textContent = new Date(t.startedAt).toLocaleDateString('ko-KR') + ' · 개인택시 서울 12가 3456';
@@ -414,20 +410,35 @@ function flash(btn, msg) {
 }
 
 /* ---------- 기록 ---------- */
+function tripTitle(t) {
+  const d = new Date(t.startedAt);
+  return d.toLocaleDateString('ko-KR', { month: 'long', day: 'numeric', weekday: 'short' }) + ' ' +
+         d.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' });
+}
 function renderHistory() {
   const list = $('historyList');
   if (!trips.length) { list.innerHTML = '<div class="empty">아직 태워준 사람이 없습니다</div>'; return; }
   list.innerHTML = trips.map((t, i) => `
-    <div class="trip" data-i="${i}">
-      <div class="trip-l">
-        <div class="trip-name">${esc(t.name)}${t.outFare ? ' <span class="tag">시계외</span>' : ''}</div>
-        <div class="trip-meta">${new Date(t.startedAt).toLocaleDateString('ko-KR')} · ${(t.dist / 1000).toFixed(2)}km · ${fmtTime(t.sec)}</div>
+    <div class="trip">
+      <div class="trip-l" data-open="${i}">
+        <div class="trip-name">${esc(tripTitle(t))}${t.outFare ? ' <span class="tag">시계외</span>' : ''}</div>
+        <div class="trip-meta">${(t.dist / 1000).toFixed(2)}km · ${fmtTime(t.sec)}</div>
       </div>
       <div class="trip-fare">${won(t.fare)}원</div>
+      <button class="trip-del" data-del="${i}" aria-label="이 운행 기록 삭제">&times;</button>
     </div>`).join('');
-  list.querySelectorAll('.trip').forEach((n) => {
-    n.onclick = () => { $('historyOverlay').hidden = true; showReceipt(trips[+n.dataset.i]); };
+  list.querySelectorAll('[data-open]').forEach((n) => {
+    n.onclick = () => { $('historyOverlay').hidden = true; showReceipt(trips[+n.dataset.open]); };
   });
+  list.querySelectorAll('[data-del]').forEach((n) => {
+    n.onclick = () => deleteTrip(+n.dataset.del);
+  });
+}
+function deleteTrip(i) {
+  trips.splice(i, 1);
+  saveTrips();
+  renderHistory();
+  render();
 }
 
 /* ---------- 설정 ---------- */
