@@ -208,6 +208,7 @@ body{
 .cloud b.on{color:var(--green)}
 .cloud b.off{color:var(--red)}
 .cloud span{font-size:11px;color:var(--muted);line-height:1.5}
+.cloud span.moved{color:var(--green);font-weight:700}
 .btn.wide{width:100%;flex:none;margin-top:8px;padding:12px;font-size:13px}
 
 /* 미수금 장부 */

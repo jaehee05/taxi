@@ -143,9 +143,15 @@ function renderCloudStatus() {
 async function linkGoogle() {
   const btn = $('s_link');
   try {
-    const { merged, pending } = await window.cloud.linkGoogle();
+    const { merged, pending, moved } = await window.cloud.linkGoogle();
     if (pending) return;                       // 리다이렉트로 넘어감
-    flash(btn, merged ? '연결됨!' : '계정 전환됨');
+    // 상태 상자를 직접 다시 그린다. 버튼 글자만 잠깐 바꾸면
+    // 1.4초 뒤 원래대로 돌아와 연결이 안 된 것처럼 보인다.
+    renderCloudStatus();
+    if (!merged && moved) {
+      $('s_cloud').insertAdjacentHTML('beforeend',
+        `<span class="moved">이 기기에 있던 운행 ${moved}건을 옮겨 왔습니다</span>`);
+    }
   } catch (e) {
     if (e.code === 'auth/popup-closed-by-user') return;
     // 무엇 때문에 막혔는지 화면에 그대로 보여 준다

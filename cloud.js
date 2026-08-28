@@ -31,7 +31,7 @@ try {
   } = authMod;
   const {
     initializeFirestore, persistentLocalCache, persistentSingleTabManager,
-    collection, doc, setDoc, addDoc, deleteDoc, updateDoc, getDoc,
+    collection, doc, setDoc, addDoc, deleteDoc, updateDoc, getDoc, getDocs,
     onSnapshot, query, orderBy, serverTimestamp,
   } = fsMod;
 
@@ -122,12 +122,38 @@ try {
         'auth/operation-not-supported-in-this-environment',
         'auth/cancelled-popup-request'].includes(e.code);
 
-      // 그 구글 계정으로 이미 만든 계정이 있으면 그쪽으로 갈아탄다
+      /* 그 구글 계정으로 이미 만든 계정이 있으면 그쪽으로 갈아탄다.
+         이때 익명 계정에 쌓여 있던 기록을 그냥 두면 영영 못 찾으므로 옮겨 싣는다.
+         승차 시각이 같은 기록은 이미 옮긴 것으로 보고 건너뛴다. */
       const takeOver = async (e) => {
         const cred = GoogleAuthProvider.credentialFromError(e);
         if (!cred) throw e;
+
+        let carry = [];
+        if (u && u.isAnonymous) {
+          try {
+            const snap = await getDocs(tripsRef(u.uid));
+            carry = snap.docs.map((d) => d.data());
+          } catch { /* 못 읽으면 옮길 것도 없다 */ }
+        }
+
         const res = await signInWithCredential(auth, cred);
-        return { user: res.user, merged: false };
+        let moved = 0;
+        if (carry.length) {
+          let already = new Set();
+          try {
+            const snap = await getDocs(tripsRef(res.user.uid));
+            already = new Set(snap.docs.map((d) => d.data().startedAt));
+          } catch { /* 비어 있다고 보고 진행 */ }
+          for (const t of carry) {
+            if (already.has(t.startedAt)) continue;
+            try {
+              await setDoc(doc(tripsRef(res.user.uid)), { ...clean(t), createdAt: serverTimestamp() });
+              moved++;
+            } catch { /* 한 건 실패해도 나머지는 계속 */ }
+          }
+        }
+        return { user: res.user, merged: false, moved };
       };
       const existing = ['auth/credential-already-in-use',
         'auth/email-already-in-use',
