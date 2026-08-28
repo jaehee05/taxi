@@ -30,17 +30,17 @@ function tripRows(t) {
   return rows;
 }
 function receiptSubtitle(t) {
-  return new Date(t.startedAt).toLocaleDateString('ko-KR') + ' · 개인택시 ' + (t.plate || '서울 12가 3456');
+  return new Date(t.startedAt).toLocaleDateString('ko-KR') + ' · 짭택시 ' + (t.plate || '08어 9766');
 }
 function receiptText(t) {
   const lines = [
-    '🚕 택시 영수증',
+    '🚕 짭택시 영수증',
     '─────────────',
     ...tripRows(t).map(([k, v]) => `${k}: ${v}`),
     '─────────────',
     `합계: ${won(t.fare)}원`,
     '',
-    '※ 현금·카드 결제 불가, 밥으로만 결제 가능합니다 🍚',
+    '※ 현금·카드 결제 가능',
   ];
   return lines.join('\n');
 }
@@ -128,8 +128,7 @@ function drawReceipt(t) {
   ctx.textAlign = 'center';
   ctx.fillStyle = '#7a7466';
   ctx.font = `14px ${KR}`;
-  ctx.fillText('※ 현금·카드 결제 불가', mid, y + 14);
-  ctx.fillText('밥으로만 결제 가능합니다 🍚', mid, y + 40);
+  ctx.fillText('※ 현금·카드 결제 가능', mid, y + 14);
 
   return cv;
 }
