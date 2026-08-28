@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1, user-scalable=no">
+<meta name="theme-color" content="#0a0b0d">
+<meta name="description" content="친구에게 밥을 청구하기 위한 택시 미터기">
+<title>택시 미터기</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🚕</text></svg>">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div class="app">
+
+  <header class="topbar">
+    <div class="lamp" id="lamp">
+      <span class="dot"></span>
+      <span id="lampText">빈차</span>
+    </div>
+    <div class="badges">
+      <span class="badge" id="surchargeBadge" hidden>심야할증 <b id="surchargeVal">20%</b></span>
+      <span class="badge gps" id="gpsBadge">GPS 대기</span>
+    </div>
+  </header>
+
+  <main class="meter">
+    <div class="fare-wrap">
+      <div class="fare-label">요금</div>
+      <div class="fare" id="fare">0</div>
+      <div class="fare-unit">원</div>
+    </div>
+
+    <div class="stats">
+      <div class="stat">
+        <div class="stat-val" id="dist">0.00</div>
+        <div class="stat-key">거리 (km)</div>
+      </div>
+      <div class="stat">
+        <div class="stat-val" id="time">00:00</div>
+        <div class="stat-key">시간</div>
+      </div>
+      <div class="stat">
+        <div class="stat-val" id="speed">0</div>
+        <div class="stat-key">속도 (km/h)</div>
+      </div>
+    </div>
+
+    <div class="hint" id="hint">기본요금 구간 (1.6km)</div>
+  </main>
+
+  <div class="passenger" id="passengerWrap">
+    <input id="passenger" type="text" placeholder="손님 이름 (영수증에 표시)" autocomplete="off" maxlength="12">
+  </div>
+
+  <button class="go" id="go">운행 시작</button>
+
+  <footer class="bottombar">
+    <button class="link" id="openHistory">운행 기록</button>
+    <span class="owed" id="owed"></span>
+    <button class="link" id="openSettings">설정</button>
+  </footer>
+
+</div>
+
+<!-- 영수증 -->
+<div class="overlay" id="receiptOverlay" hidden>
+  <div class="receipt">
+    <div class="r-head">
+      <div class="r-title">택 시 영 수 증</div>
+      <div class="r-sub" id="rCompany">개인택시 · 차량번호 서울 12가 3456</div>
+    </div>
+    <div class="r-rows" id="rRows"></div>
+    <div class="r-total">
+      <span>합 계</span>
+      <b id="rTotal">0원</b>
+    </div>
+    <div class="r-note">※ 현금·카드 결제 불가<br>밥으로만 결제 가능합니다 🍚</div>
+    <div class="r-actions">
+      <button class="btn ghost" id="rClose">닫기</button>
+      <button class="btn" id="rShare">청구서 보내기</button>
+    </div>
+  </div>
+</div>
+
+<!-- 설정 -->
+<div class="overlay" id="settingsOverlay" hidden>
+  <div class="sheet">
+    <h2>요금표 설정</h2>
+    <p class="sheet-desc">서울 중형택시 기준값입니다. 요금이 바뀌었거나 장난용으로 바꾸고 싶으면 직접 고치세요.</p>
+    <label>기본요금 (원)<input type="number" id="s_base" min="0" step="100"></label>
+    <label>기본거리 (m)<input type="number" id="s_baseDist" min="0" step="100"></label>
+    <label>거리요금 단위 (m당)<input type="number" id="s_unitDist" min="1" step="1"></label>
+    <label>시간요금 단위 (초당)<input type="number" id="s_unitTime" min="1" step="1"></label>
+    <label>단위요금 (원)<input type="number" id="s_unitFare" min="0" step="10"></label>
+    <label>시간요금 적용 속도 (km/h 미만)<input type="number" id="s_slowSpeed" min="0" step="0.01"></label>
+    <label class="row"><input type="checkbox" id="s_night"> 심야할증 자동 적용 (22시~04시)</label>
+    <label class="row"><input type="checkbox" id="s_sim"> 시뮬레이션 모드 (GPS 없이 가상 주행)</label>
+    <div class="sheet-actions">
+      <button class="btn ghost" id="s_reset">기본값 복원</button>
+      <button class="btn" id="s_close">저장하고 닫기</button>
+    </div>
+  </div>
+</div>
+
+<!-- 기록 -->
+<div class="overlay" id="historyOverlay" hidden>
+  <div class="sheet">
+    <h2>운행 기록</h2>
+    <div id="historyList" class="history"></div>
+    <div class="sheet-actions">
+      <button class="btn ghost" id="h_clear">전체 삭제</button>
+      <button class="btn" id="h_close">닫기</button>
+    </div>
+  </div>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>
