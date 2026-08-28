@@ -6,6 +6,7 @@
 const REGIONS = {
   seongnam: {
     label: '성남 · 분당',
+    plate: '경기 34바 5678',
     fare: { base: 4800, baseDist: 2000, unitDist: 132, unitTime: 31, unitFare: 100, slowSpeed: 15.33, outPct: 20 },
     night: [[0, 4, 20]],
     bounds: [
@@ -18,6 +19,7 @@ const REGIONS = {
   },
   seoul: {
     label: '서울',
+    plate: '서울 12가 3456',
     fare: { base: 4800, baseDist: 1600, unitDist: 131, unitTime: 30, unitFare: 100, slowSpeed: 15.33, outPct: 20 },
     night: [[22, 23, 20], [23, 2, 40], [2, 4, 20]],
     bounds: [
@@ -333,6 +335,7 @@ function stop() {
     metered: meteredFare(),
     outFare: Math.round(outFare()),
     outPct: rates.outPct,
+    plate: region().plate,
     surcharge: pct,
     fare: totalFare(pct),
   };
@@ -371,14 +374,19 @@ function tripRows(t) {
   if (t.surcharge) rows.push(['심야할증', `+${t.surcharge}%`]);
   return rows;
 }
+function receiptSubtitle(t) {
+  return new Date(t.startedAt).toLocaleDateString('ko-KR') + ' · 개인택시 ' + (t.plate || region().plate);
+}
 function showReceipt(t) {
   $('rRows').innerHTML = tripRows(t)
     .map(([k, v]) => `<div class="r-row"><span>${esc(k)}</span><span>${esc(v)}</span></div>`)
     .join('');
   $('rTotal').textContent = won(t.fare) + '원';
-  $('rCompany').textContent = new Date(t.startedAt).toLocaleDateString('ko-KR') + ' · 개인택시 서울 12가 3456';
+  $('rCompany').textContent = receiptSubtitle(t);
   $('receiptOverlay').hidden = false;
-  $('rShare').onclick = () => shareTrip(t);
+  $('rShare').onclick = () => shareTripImage(t);
+  $('rText').onclick = () => copyTripText(t);
+  prepareImage(t);
 }
 function esc(s) {
   return String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -395,13 +403,144 @@ function receiptText(t) {
   ];
   return lines.join('\n');
 }
-async function shareTrip(t) {
+async function copyTripText(t) {
   const text = receiptText(t);
   try {
-    if (navigator.share) { await navigator.share({ title: '택시 영수증', text }); return; }
     await navigator.clipboard.writeText(text);
-    flash($('rShare'), '복사됨!');
-  } catch { /* 사용자가 취소 */ }
+    flash($('rText'), '복사됨!');
+  } catch {
+    if (navigator.share) { try { await navigator.share({ title: '택시 영수증', text }); } catch {} }
+  }
+}
+
+/* ---------- 영수증 이미지 ---------- */
+const KR = '"Apple SD Gothic Neo", -apple-system, system-ui, sans-serif';
+const MONO = 'ui-monospace, Menlo, monospace';
+const IMG_W = 640;   // 논리 폭 (실제 PNG는 2배)
+
+function dashLine(ctx, y, w, pad) {
+  ctx.save();
+  ctx.strokeStyle = '#c9c2b0';
+  ctx.lineWidth = 2;
+  ctx.setLineDash([6, 6]);
+  ctx.beginPath();
+  ctx.moveTo(pad, y);
+  ctx.lineTo(w - pad, y);
+  ctx.stroke();
+  ctx.restore();
+}
+
+// 영수증을 캔버스에 직접 그린다 (외부 라이브러리 없이, 화면 디자인과 동일한 톤)
+function drawReceipt(t) {
+  const pad = 44, rows = tripRows(t);
+  // 높이를 먼저 계산해서 캔버스를 잡는다
+  const h = pad + 52 + 44 + 34 + 28 + rows.length * 34 + 4 + 26 + 46 + 30 + 52 + pad;
+  const dpr = 2;
+  const cv = document.createElement('canvas');
+  cv.width = IMG_W * dpr;
+  cv.height = h * dpr;
+  const ctx = cv.getContext('2d');
+  ctx.scale(dpr, dpr);
+
+  ctx.fillStyle = '#f6f3ea';
+  ctx.fillRect(0, 0, IMG_W, h);
+
+  const mid = IMG_W / 2;
+  let y = pad;
+
+  ctx.textAlign = 'center';
+  ctx.fillStyle = '#22201c';
+  ctx.font = `36px ${KR}`;
+  ctx.fillText('🚕', mid, y + 34);
+  y += 52;
+
+  ctx.font = `700 30px ${KR}`;
+  ctx.fillText('택 시 영 수 증', mid, y + 26);
+  y += 44;
+
+  ctx.font = `14px ${MONO}`;
+  ctx.fillStyle = '#7a7466';
+  ctx.fillText(receiptSubtitle(t), mid, y + 14);
+  y += 34;
+
+  dashLine(ctx, y, IMG_W, pad);
+  y += 28;
+
+  ctx.font = `17px ${MONO}`;
+  for (const [k, v] of rows) {
+    ctx.textAlign = 'left';
+    ctx.fillStyle = '#7a7466';
+    ctx.fillText(k, pad, y + 17);
+    ctx.textAlign = 'right';
+    ctx.fillStyle = '#22201c';
+    ctx.fillText(v, IMG_W - pad, y + 17);
+    y += 34;
+  }
+
+  y += 4;
+  dashLine(ctx, y, IMG_W, pad);
+  y += 26;
+
+  ctx.textAlign = 'left';
+  ctx.fillStyle = '#22201c';
+  ctx.font = `700 20px ${KR}`;
+  ctx.fillText('합 계', pad, y + 26);
+  ctx.textAlign = 'right';
+  ctx.font = `700 32px ${MONO}`;
+  ctx.fillText(won(t.fare) + '원', IMG_W - pad, y + 28);
+  y += 46;
+
+  dashLine(ctx, y, IMG_W, pad);
+  y += 30;
+
+  ctx.textAlign = 'center';
+  ctx.fillStyle = '#7a7466';
+  ctx.font = `14px ${KR}`;
+  ctx.fillText('※ 현금·카드 결제 불가', mid, y + 14);
+  ctx.fillText('밥으로만 결제 가능합니다 🍚', mid, y + 40);
+
+  return cv;
+}
+
+function receiptFileName(t) {
+  const d = new Date(t.startedAt), p = (n) => String(n).padStart(2, '0');
+  return `택시영수증_${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}_${p(d.getHours())}${p(d.getMinutes())}.png`;
+}
+
+// 공유는 사용자 제스처 안에서 즉시 호출돼야 하므로, 영수증을 열 때 미리 만들어 둔다
+let pendingImage = null;
+function prepareImage(t) {
+  pendingImage = { trip: t, promise: null };
+  const ref = pendingImage;
+  ref.promise = new Promise((resolve) => {
+    try { drawReceipt(t).toBlob(resolve, 'image/png'); }
+    catch { resolve(null); }
+  });
+}
+
+async function shareTripImage(t) {
+  const btn = $('rShare');
+  let blob = null;
+  try {
+    blob = pendingImage && pendingImage.trip === t
+      ? await pendingImage.promise
+      : await new Promise((r) => drawReceipt(t).toBlob(r, 'image/png'));
+  } catch { /* 아래에서 처리 */ }
+  if (!blob) { flash(btn, '이미지 생성 실패'); return; }
+
+  const file = new File([blob], receiptFileName(t), { type: 'image/png' });
+  if (navigator.canShare && navigator.canShare({ files: [file] })) {
+    try { await navigator.share({ files: [file] }); return; }
+    catch (e) { if (e.name === 'AbortError') return; }   // 사용자가 취소
+  }
+  // 공유를 못 쓰면 내려받기로
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = file.name;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+  flash(btn, '이미지 저장됨');
 }
 function flash(btn, msg) {
   const old = btn.textContent;
