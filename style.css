@@ -243,5 +243,3 @@ body{
 }
 .pub .receipt{max-width:430px}
 .pub-msg{color:var(--muted);font-size:14px;text-align:center;line-height:1.6}
-.pub-foot{color:var(--amber-dim);font-size:13px;font-weight:700;text-decoration:none}
-.pub-foot:active{color:var(--amber)}
