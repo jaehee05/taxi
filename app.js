@@ -6,7 +6,7 @@
 const REGIONS = {
   seongnam: {
     label: '성남 · 분당',
-    plate: '경기 34바 5678',
+    plate: '08어 9766',
     fare: { base: 4800, baseDist: 2000, unitDist: 132, unitTime: 31, unitFare: 100, outPct: 20 },
     night: [[0, 4, 20]],
     bounds: [
@@ -19,7 +19,7 @@ const REGIONS = {
   },
   seoul: {
     label: '서울',
-    plate: '서울 12가 3456',
+    plate: '08어 9766',
     fare: { base: 4800, baseDist: 1600, unitDist: 131, unitTime: 30, unitFare: 100, outPct: 20 },
     night: [[22, 23, 20], [23, 2, 40], [2, 4, 20]],
     bounds: [
