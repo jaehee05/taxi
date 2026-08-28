@@ -7,7 +7,9 @@ const DEFAULTS = {
   unitTime: 30,      // 시간요금 단위 (초)
   unitFare: 100,     // 단위당 요금 (원)
   slowSpeed: 15.33,  // 이 속도 미만이면 시간요금 적용 (km/h)
+  outPct: 20,        // 시계외 할증률 (%)
   night: true,       // 심야할증
+  autoOut: false,    // 시계외 자동 판정 (서울 경계 기준)
   sim: false,        // 시뮬레이션 모드
 };
 
@@ -22,7 +24,11 @@ const S = {
   startedAt: 0,
   endedAt: 0,
   dist: 0,          // 총 주행거리 (m)
-  units: 0,         // 기본거리 초과 후 누적 단위 (소수)
+  distOut: 0,       // 시계외 주행거리 (m)
+  unitsIn: 0,       // 시내 구간 누적 단위 (소수)
+  unitsOut: 0,      // 시계외 구간 누적 단위 (소수)
+  outside: false,   // 현재 시계외 여부
+  manualOut: false, // 사용자가 직접 조작 → 자동 판정 중단
   speed: 0,         // 현재 속도 (km/h)
   lastFix: null,    // {lat, lon, t}
   lastFixAt: 0,     // GPS 마지막 수신 시각
@@ -40,6 +46,7 @@ const el = {
   lamp: $('lamp'), lampText: $('lampText'),
   gpsBadge: $('gpsBadge'), scBadge: $('surchargeBadge'), scVal: $('surchargeVal'),
   fare: $('fare'), dist: $('dist'), time: $('time'), speed: $('speed'), hint: $('hint'),
+  outBtn: $('outBtn'), outNote: $('outNote'),
   go: $('go'), passenger: $('passenger'), passengerWrap: $('passengerWrap'), owed: $('owed'),
 };
 
@@ -65,11 +72,17 @@ function surchargePct(d = new Date()) {
   if (h < 4) return 20;
   return 0;
 }
+// 미터요금: 기본요금 + 누적 단위 × 단위요금 (시내·시계외 합산)
 function meteredFare() {
-  return rates.base + Math.floor(S.units) * rates.unitFare;
+  return rates.base + Math.floor(S.unitsIn + S.unitsOut) * rates.unitFare;
 }
+// 시계외 할증: 시계외 구간에서 오른 요금에만 적용
+function outFare() {
+  return Math.floor(S.unitsOut) * rates.unitFare * (rates.outPct / 100);
+}
+// 최종 요금: (미터요금 + 시계외할증)에 심야할증을 곱하고 100원 단위 반올림
 function totalFare(pct = surchargePct()) {
-  return Math.round(meteredFare() * (1 + pct / 100) / 100) * 100;
+  return Math.round((meteredFare() + outFare()) * (1 + pct / 100) / 100) * 100;
 }
 
 /* ---------- 거리 ---------- */
@@ -81,14 +94,50 @@ function haversine(a, b) {
   return 2 * R * Math.asin(Math.sqrt(s));
 }
 
+// 현재 구간(시내/시계외)에 단위 적립
+function addUnits(u) {
+  if (S.outside) S.unitsOut += u; else S.unitsIn += u;
+}
+
 // 거리 누적 + 기본거리 초과분에 대해 거리요금 단위 적립
 function addDistance(dd, speedKmh) {
   if (!(dd > 0)) return;
-  const before = S.dist;
   S.dist += dd;
+  if (S.outside) S.distOut += dd;
   if (S.dist <= rates.baseDist) return;
   const chargeable = Math.min(dd, S.dist - rates.baseDist);
-  if (speedKmh >= rates.slowSpeed) S.units += chargeable / rates.unitDist;
+  if (speedKmh >= rates.slowSpeed) addUnits(chargeable / rates.unitDist);
+}
+
+/* ---------- 시계외 판정 ---------- */
+// 서울시 행정경계 근사 폴리곤 [위도, 경도]. 경계 부근 오차 ±1~2km.
+const SEOUL = [
+  [37.701, 127.045], [37.690, 127.090], [37.660, 127.110], [37.640, 127.140],
+  [37.600, 127.180], [37.560, 127.184], [37.530, 127.180], [37.510, 127.150],
+  [37.470, 127.130], [37.450, 127.110], [37.440, 127.060], [37.428, 127.030],
+  [37.440, 126.990], [37.450, 126.940], [37.460, 126.900], [37.470, 126.860],
+  [37.490, 126.820], [37.520, 126.780], [37.560, 126.764], [37.590, 126.790],
+  [37.600, 126.830], [37.610, 126.870], [37.640, 126.900], [37.660, 126.930],
+  [37.680, 126.980], [37.695, 127.010],
+];
+function inSeoul(p) {
+  let inside = false;
+  for (let i = 0, j = SEOUL.length - 1; i < SEOUL.length; j = i++) {
+    const [yi, xi] = SEOUL[i], [yj, xj] = SEOUL[j];
+    if ((yi > p.lat) !== (yj > p.lat) &&
+        p.lon < (xj - xi) * (p.lat - yi) / (yj - yi) + xi) inside = !inside;
+  }
+  return inside;
+}
+function setOutside(v) {
+  if (S.outside === v) return;
+  S.outside = v;
+  render();
+}
+function toggleOutside() {
+  S.manualOut = true;          // 손으로 만졌으면 이번 운행은 자동 판정 중단
+  setOutside(!S.outside);
+  render();
 }
 
 /* ---------- GPS ---------- */
@@ -109,6 +158,10 @@ function onFix(pos) {
   if (c.accuracy > 60) return;                 // 정확도 낮은 신호는 버림
 
   const fix = { lat: c.latitude, lon: c.longitude, t: now };
+
+  // 시계외 자동 판정 (수동 조작 전까지만)
+  if (rates.autoOut && !S.manualOut) setOutside(!inSeoul(fix));
+
   if (S.lastFix) {
     const dt = (now - S.lastFix.t) / 1000;
     if (dt > 0.3) {
@@ -164,7 +217,7 @@ function tick() {
     if (!rates.sim && now - S.lastFixAt > 5000) S.speed = 0;
     // 기본거리 소진 후, 저속/정차 중이면 시간요금 적립
     if (S.dist > rates.baseDist && S.speed < rates.slowSpeed && dt > 0) {
-      S.units += dt / rates.unitTime;
+      addUnits(dt / rates.unitTime);
     }
   }
   render();
@@ -194,6 +247,12 @@ function render() {
   el.scBadge.hidden = pct === 0;
   el.scVal.textContent = pct + '%';
 
+  el.outBtn.classList.toggle('on', S.outside);
+  el.outBtn.textContent = S.outside ? `시계외 할증 +${rates.outPct}%` : '시계외 할증';
+  el.outNote.textContent = S.outside
+    ? `시계외 ${(S.distOut / 1000).toFixed(2)}km 주행중`
+    : (rates.autoOut && !S.manualOut ? '서울 경계 자동 판정중' : '');
+
   if (!S.running) {
     el.hint.textContent = S.startedAt ? '운행 종료' : `기본요금 ${won(rates.base)}원 · 기본거리 ${(rates.baseDist / 1000).toFixed(1)}km`;
   } else if (S.dist <= rates.baseDist) {
@@ -214,7 +273,9 @@ async function start() {
   S.running = true;
   S.startedAt = Date.now();
   S.endedAt = 0;
-  S.dist = 0; S.units = 0; S.speed = 0; S.lastFix = null; S.lastFixAt = Date.now();
+  S.dist = 0; S.distOut = 0; S.unitsIn = 0; S.unitsOut = 0;
+  S.outside = false; S.manualOut = false;
+  S.speed = 0; S.lastFix = null; S.lastFixAt = Date.now();
   lastTick = 0;
 
   el.go.textContent = '운행 종료';
@@ -249,7 +310,10 @@ function stop() {
     endedAt: S.endedAt,
     sec: Math.round((S.endedAt - S.startedAt) / 1000),
     dist: S.dist,
+    distOut: S.distOut,
     metered: meteredFare(),
+    outFare: Math.round(outFare()),
+    outPct: rates.outPct,
     surcharge: pct,
     fare: totalFare(pct),
   };
@@ -283,6 +347,9 @@ function tripRows(t) {
     ['주행시간', fmtTime(t.sec)],
     ['미터요금', won(t.metered) + '원'],
   ];
+  if (t.outFare) {
+    rows.push([`시계외 할증 (${(t.distOut / 1000).toFixed(2)}km)`, `+${won(t.outFare)}원`]);
+  }
   if (t.surcharge) rows.push(['심야할증', `+${t.surcharge}%`]);
   return rows;
 }
@@ -331,7 +398,7 @@ function renderHistory() {
   list.innerHTML = trips.map((t, i) => `
     <div class="trip" data-i="${i}">
       <div class="trip-l">
-        <div class="trip-name">${esc(t.name)}</div>
+        <div class="trip-name">${esc(t.name)}${t.outFare ? ' <span class="tag">시계외</span>' : ''}</div>
         <div class="trip-meta">${new Date(t.startedAt).toLocaleDateString('ko-KR')} · ${(t.dist / 1000).toFixed(2)}km · ${fmtTime(t.sec)}</div>
       </div>
       <div class="trip-fare">${won(t.fare)}원</div>
@@ -342,10 +409,11 @@ function renderHistory() {
 }
 
 /* ---------- 설정 ---------- */
-const FIELDS = ['base', 'baseDist', 'unitDist', 'unitTime', 'unitFare', 'slowSpeed'];
+const FIELDS = ['base', 'baseDist', 'unitDist', 'unitTime', 'unitFare', 'slowSpeed', 'outPct'];
 function fillSettings() {
   FIELDS.forEach((k) => { $('s_' + k).value = rates[k]; });
   $('s_night').checked = !!rates.night;
+  $('s_autoOut').checked = !!rates.autoOut;
   $('s_sim').checked = !!rates.sim;
 }
 function readSettings() {
@@ -356,6 +424,7 @@ function readSettings() {
   if (!(rates.unitDist > 0)) rates.unitDist = DEFAULTS.unitDist;
   if (!(rates.unitTime > 0)) rates.unitTime = DEFAULTS.unitTime;
   rates.night = $('s_night').checked;
+  rates.autoOut = $('s_autoOut').checked;
   rates.sim = $('s_sim').checked;
   saveRates();
   render();
@@ -363,6 +432,7 @@ function readSettings() {
 
 /* ---------- 이벤트 ---------- */
 el.go.onclick = () => (S.running ? stop() : start());
+el.outBtn.onclick = toggleOutside;
 
 $('openSettings').onclick = () => { fillSettings(); $('settingsOverlay').hidden = false; };
 $('s_close').onclick = () => { readSettings(); $('settingsOverlay').hidden = true; };
