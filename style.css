@@ -19,8 +19,14 @@ body{
   font-family:-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Pretendard","Noto Sans KR",system-ui,sans-serif;
   overscroll-behavior:none;
 }
+
+/* 미터기 화면은 한 화면에 딱 맞춰 고정한다. 주행 중 손이 스쳐도 밀리지 않게.
+   오버레이 시트는 자기 안에서 따로 스크롤되므로 영향받지 않는다. */
+html:has(body.locked){height:100%;overflow:hidden}
+body.locked{height:100dvh;overflow:hidden;touch-action:manipulation}
+
 .app{
-  min-height:100dvh;
+  height:100dvh;
   display:flex;flex-direction:column;
   padding:calc(env(safe-area-inset-top) + 14px) 16px calc(env(safe-area-inset-bottom) + 14px);
   max-width:520px;margin:0 auto;gap:14px;
@@ -46,7 +52,7 @@ body{
   background:linear-gradient(180deg,var(--panel) 0%,#101217 100%);
   border:1px solid var(--line);border-radius:20px;
   padding:26px 18px 18px;
-  flex:1;display:flex;flex-direction:column;justify-content:center;gap:22px;
+  flex:1;min-height:0;display:flex;flex-direction:column;justify-content:center;gap:22px;
   box-shadow:inset 0 1px 0 rgba(255,255,255,.04);
 }
 .fare-wrap{text-align:center;position:relative}
