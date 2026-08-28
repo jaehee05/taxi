@@ -327,20 +327,10 @@ function elapsed() {
   return ((S.running ? Date.now() : S.endedAt) - S.startedAt) / 1000;
 }
 
-// 실제 미터기처럼 다음 100원이 오르기까지 남은 양을 보여 준다
+// 미터기의 기본거리 창. 실제 미터기처럼 숫자만 보여 준다.
 function hintText() {
-  if (!S.running) {
-    return S.startedAt ? '운행 종료'
-      : `기본요금 ${won(rates.base)}원 · 기본거리 ${(rates.baseDist / 1000).toFixed(1)}km`;
-  }
-  const slow = S.speed < slowSpeed();
-  const mark = slow ? '⏱' : '📍';
-  if (baseLeft() > 0) {
-    return `${mark} 기본거리 ${Math.ceil(baseLeft())}m 남음`;
-  }
-  // 다음 100원이 오르기까지 남은 효과거리
-  const left = rates.unitDist - (S.effCharged % rates.unitDist);
-  return `${mark} 다음 ${won(rates.unitFare)}원까지 ${Math.ceil(left)}m`;
+  if (!S.running || baseLeft() <= 0) return '';
+  return String(Math.ceil(baseLeft()));
 }
 
 function render() {
@@ -355,9 +345,7 @@ function render() {
 
   el.outBtn.classList.toggle('on', S.outside);
   el.outBtn.textContent = S.outside ? `시계외 할증 +${rates.outPct}%` : '시계외 할증';
-  el.outNote.textContent = S.outside
-    ? `시계외 ${(S.distOut / 1000).toFixed(2)}km 주행중`
-    : (rates.autoOut && !S.manualOut ? `${region().label.split(' · ')[0]}시 경계 자동 판정중` : '');
+  el.outNote.textContent = S.outside ? `${(S.distOut / 1000).toFixed(2)}km` : '';
 
   el.hint.textContent = hintText();
 
