@@ -143,11 +143,18 @@ function renderCloudStatus() {
 async function linkGoogle() {
   const btn = $('s_link');
   try {
-    const { merged } = await window.cloud.linkGoogle();
+    const { merged, pending } = await window.cloud.linkGoogle();
+    if (pending) return;                       // 리다이렉트로 넘어감
     flash(btn, merged ? '연결됨!' : '계정 전환됨');
   } catch (e) {
     if (e.code === 'auth/popup-closed-by-user') return;
-    flash(btn, '연결 실패');
+    // 무엇 때문에 막혔는지 화면에 그대로 보여 준다
+    const code = (e.code || e.message || '').replace('auth/', '');
+    $('s_cloud').innerHTML =
+      `<b class="off">연결 실패</b><span>${esc(code)}</span>` +
+      (code === 'unauthorized-domain'
+        ? `<span>Firebase 콘솔 → Authentication → Settings → 승인된 도메인에 <b>${esc(location.hostname)}</b> 를 추가하세요</span>`
+        : '');
     console.warn('[cloud] 구글 연결 실패:', e.code || e.message);
   }
 }

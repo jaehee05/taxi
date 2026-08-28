@@ -27,6 +27,7 @@ try {
   const {
     getAuth, onAuthStateChanged, signInAnonymously, signOut,
     GoogleAuthProvider, linkWithPopup, signInWithPopup, signInWithCredential,
+    linkWithRedirect, signInWithRedirect, getRedirectResult,
   } = authMod;
   const {
     initializeFirestore, persistentLocalCache, persistentSingleTabManager,
@@ -115,22 +116,40 @@ try {
     async linkGoogle() {
       const provider = new GoogleAuthProvider();
       const u = auth.currentUser;
+
+      // 팝업을 못 띄우는 환경(모바일 사파리, 팝업 차단)에서는 리다이렉트로 넘어간다
+      const viaRedirect = (e) => ['auth/popup-blocked',
+        'auth/operation-not-supported-in-this-environment',
+        'auth/cancelled-popup-request'].includes(e.code);
+
+      // 그 구글 계정으로 이미 만든 계정이 있으면 그쪽으로 갈아탄다
+      const takeOver = async (e) => {
+        const cred = GoogleAuthProvider.credentialFromError(e);
+        if (!cred) throw e;
+        const res = await signInWithCredential(auth, cred);
+        return { user: res.user, merged: false };
+      };
+      const existing = ['auth/credential-already-in-use',
+        'auth/email-already-in-use',
+        'auth/account-exists-with-different-credential'];
+
       if (u && u.isAnonymous) {
         try {
           const res = await linkWithPopup(u, provider);
           return { user: res.user, merged: true };
         } catch (e) {
-          // 이미 그 구글 계정으로 만든 기록이 있는 경우엔 그쪽으로 갈아탄다
-          if (e.code === 'auth/credential-already-in-use') {
-            const cred = GoogleAuthProvider.credentialFromError(e);
-            const res = await signInWithCredential(auth, cred);
-            return { user: res.user, merged: false };
-          }
+          if (existing.includes(e.code)) return takeOver(e);
+          if (viaRedirect(e)) { await linkWithRedirect(u, provider); return { pending: true }; }
           throw e;
         }
       }
-      const res = await signInWithPopup(auth, provider);
-      return { user: res.user, merged: false };
+      try {
+        const res = await signInWithPopup(auth, provider);
+        return { user: res.user, merged: false };
+      } catch (e) {
+        if (viaRedirect(e)) { await signInWithRedirect(auth, provider); return { pending: true }; }
+        throw e;
+      }
     },
 
     async signOutCloud() {
@@ -144,6 +163,13 @@ try {
     api.onAuth(user);
     emit('cloud-auth', user);
   });
+
+  try {
+    await getRedirectResult(auth);   // 리다이렉트 로그인에서 돌아온 경우
+  } catch (e) {
+    api.error = e.code || e.message;
+    console.warn('[cloud] 리다이렉트 로그인 실패:', api.error);
+  }
 
   if (!auth.currentUser) await signInAnonymously(auth);
 } catch (e) {
