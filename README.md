@@ -55,6 +55,38 @@ python3 -m http.server 8000
 # http://localhost:8000
 ```
 
+## Firebase / Firestore
+
+운행 기록을 클라우드에 저장하고, 영수증을 링크로 공유하고, 손님별 미수금 장부를 씁니다.
+Firebase 연결에 실패하면 앱은 자동으로 localStorage 모드로 떨어져 그대로 동작합니다.
+
+### 콘솔에서 켜야 하는 것
+
+1. **Authentication → Sign-in method → 익명** 사용 설정
+   켜지 않으면 `auth/configuration-not-found` 로 클라우드가 비활성화됩니다.
+2. **Authentication → Sign-in method → Google** 사용 설정
+   설정 화면의 *구글 계정 연결* 로 기기 간 동기화를 하려면 필요합니다.
+3. **Authentication → Settings → 승인된 도메인** 에 Vercel 배포 도메인 추가
+4. **Firestore → 규칙** 에 `firestore.rules` 배포
+
+```bash
+npx firebase-tools deploy --only firestore:rules --project taxi-6c0c5
+```
+
+### 데이터 구조
+
+| 경로 | 용도 | 접근 |
+|---|---|---|
+| `users/{uid}/trips/{id}` | 운행 기록 | 본인만 읽기·쓰기 |
+| `receipts/{id}` | 공유 영수증 | 링크를 아는 사람은 읽기, 목록 조회 불가, 발행자만 삭제 |
+
+익명 로그인으로 시작하므로 로그인 화면이 없습니다. 다만 익명 계정은 기기마다 다르므로,
+폰과 PC에서 같은 기록을 보려면 설정에서 **구글 계정 연결**을 한 번 해야 합니다.
+익명 계정에 구글 계정을 얹는 방식이라 그때까지 쌓인 기록은 그대로 보존됩니다.
+
+규칙은 필드 화이트리스트와 숫자 상한을 걸어 두었습니다. 로그인만 하면 문서를 쓸 수 있는
+구조라, 저장소로 악용되지 않도록 막아 둔 것입니다.
+
 ## 배포
 
 Vercel 정적 호스팅. 빌드 과정 없이 파일 그대로 올라갑니다.
