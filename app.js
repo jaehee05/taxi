@@ -107,7 +107,7 @@ window.addEventListener('cloud-ready', (e) => {
   renderCloudStatus();
   if (!c.available) return;
   cloudOn = true;
-  c.onTrips((list) => { trips = list; refreshLists(); });
+  c.onTrips((list) => { trips = list.filter((t) => !deleting.has(t.id)); refreshLists(); });
   migrateLocalTrips();
 });
 window.addEventListener('cloud-auth', renderCloudStatus);
@@ -608,15 +608,44 @@ function renderHistory() {
     n.onclick = () => deleteTrip(+n.dataset.del);
   });
 }
+/* 삭제 요청을 보낸 기록의 id. 서버 확인이 오기 전에 도착한 스냅샷에는
+   아직 그 기록이 들어 있어 화면에 되살아나 보이므로, 여기 있는 동안은 걸러 낸다. */
+const deleting = new Set();
+
 function deleteTrip(i) {
   const t = trips[i];
-  if (cloudOn && t.id) {
-    window.cloud.deleteTrip(t.id).catch(() => {});
-    return;   // 스냅샷이 목록을 다시 그린다
-  }
+  if (!t) return;
+
+  // 화면에서 먼저 지운다. 서버 왕복을 기다리며 남아 있으면 안 지워진 것처럼 보인다.
   trips.splice(i, 1);
+
+  if (cloudOn && t.id) {
+    deleting.add(t.id);
+    refreshLists();
+    window.cloud.deleteTrip(t.id)
+      .then(() => { deleting.delete(t.id); })
+      .catch((e) => {
+        // 정말 실패했으면 되살리고 이유를 알린다
+        deleting.delete(t.id);
+        trips.push(t);
+        trips.sort((a, b) => b.startedAt - a.startedAt);
+        refreshLists();
+        alertOnce('삭제 실패: ' + (e.code || e.message));
+      });
+    return;
+  }
   saveTrips();
   refreshLists();
+}
+
+// 같은 메시지를 반복해서 띄우지 않는다
+let lastNotice = '';
+function alertOnce(msg) {
+  console.warn('[cloud]', msg);
+  if (msg === lastNotice) return;
+  lastNotice = msg;
+  const box = $('s_cloud');
+  if (box) box.innerHTML = `<b class="off">${esc(msg)}</b>`;
 }
 
 /* ---------- 미수금 장부 ---------- */

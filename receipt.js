@@ -66,7 +66,7 @@ function dashLine(ctx, y, w, pad) {
 function drawReceipt(t) {
   const pad = 44, rows = tripRows(t);
   // 높이를 먼저 계산해서 캔버스를 잡는다
-  const h = pad + 52 + 44 + 34 + 28 + rows.length * 34 + 4 + 26 + 46 + 30 + 52 + pad;
+  const h = pad + 52 + 44 + 34 + 28 + rows.length * 34 + 4 + 26 + 46 + 30 + 26 + pad;
   const dpr = 2;
   const cv = document.createElement('canvas');
   cv.width = IMG_W * dpr;
