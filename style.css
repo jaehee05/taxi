@@ -120,6 +120,14 @@ body{
 }
 .sheet h2{font-size:17px;margin-bottom:6px}
 .sheet-desc{font-size:12px;color:var(--muted);margin-bottom:16px;line-height:1.5}
+
+/* 지역 선택 */
+.seg{display:flex;gap:6px;background:var(--panel-2);border:1px solid var(--line);border-radius:11px;padding:4px;margin:12px 0 14px}
+.seg-btn{
+  flex:1;padding:10px;border:none;border-radius:8px;background:none;color:var(--muted);
+  font-size:13px;font-weight:700;font-family:inherit;cursor:pointer;transition:background .15s,color .15s;
+}
+.seg-btn.on{background:var(--amber);color:#1a1200}
 .sheet label{display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:13px;padding:9px 0;border-bottom:1px solid var(--line)}
 .sheet label.row{justify-content:flex-start;gap:10px}
 .sheet label.row input{width:auto}

@@ -1,15 +1,43 @@
 /* 택시 미터기 — 서울 중형택시 요금 체계 기반 */
 
+/* 지역별 요금 체계와 시 경계.
+   심야할증 구간은 [시작시, 끝시, 할증률]. 끝시가 시작시보다 작으면 자정을 넘긴 구간.
+   경계 폴리곤은 [위도, 경도] 근사치로, 경계 부근 1~2km 오차가 있음. */
+const REGIONS = {
+  seongnam: {
+    label: '성남 · 분당',
+    fare: { base: 4800, baseDist: 2000, unitDist: 132, unitTime: 31, unitFare: 100, slowSpeed: 15.33, outPct: 20 },
+    night: [[0, 4, 20]],
+    bounds: [
+      [37.500, 127.100], [37.495, 127.135], [37.485, 127.160], [37.470, 127.185],
+      [37.450, 127.200], [37.430, 127.210], [37.405, 127.200], [37.385, 127.185],
+      [37.360, 127.165], [37.340, 127.140], [37.325, 127.115], [37.330, 127.090],
+      [37.345, 127.075], [37.365, 127.065], [37.390, 127.055], [37.415, 127.050],
+      [37.440, 127.055], [37.460, 127.065], [37.480, 127.080], [37.492, 127.090],
+    ],
+  },
+  seoul: {
+    label: '서울',
+    fare: { base: 4800, baseDist: 1600, unitDist: 131, unitTime: 30, unitFare: 100, slowSpeed: 15.33, outPct: 20 },
+    night: [[22, 23, 20], [23, 2, 40], [2, 4, 20]],
+    bounds: [
+      [37.701, 127.045], [37.690, 127.090], [37.660, 127.110], [37.640, 127.140],
+      [37.600, 127.180], [37.560, 127.184], [37.530, 127.180], [37.510, 127.150],
+      [37.470, 127.130], [37.450, 127.110], [37.440, 127.060], [37.428, 127.030],
+      [37.440, 126.990], [37.450, 126.940], [37.460, 126.900], [37.470, 126.860],
+      [37.490, 126.820], [37.520, 126.780], [37.560, 126.764], [37.590, 126.790],
+      [37.600, 126.830], [37.610, 126.870], [37.640, 126.900], [37.660, 126.930],
+      [37.680, 126.980], [37.695, 127.010],
+    ],
+  },
+};
+const DEFAULT_REGION = 'seongnam';
+
 const DEFAULTS = {
-  base: 4800,        // 기본요금 (원)
-  baseDist: 1600,    // 기본거리 (m)
-  unitDist: 131,     // 거리요금 단위 (m)
-  unitTime: 30,      // 시간요금 단위 (초)
-  unitFare: 100,     // 단위당 요금 (원)
-  slowSpeed: 15.33,  // 이 속도 미만이면 시간요금 적용 (km/h)
-  outPct: 20,        // 시계외 할증률 (%)
-  night: true,       // 심야할증
-  autoOut: false,    // 시계외 자동 판정 (서울 경계 기준)
+  region: DEFAULT_REGION,
+  ...REGIONS[DEFAULT_REGION].fare,
+  night: true,       // 심야할증 적용 여부
+  autoOut: false,    // 시계외 자동 판정 (시 경계 기준)
   sim: false,        // 시뮬레이션 모드
 };
 
@@ -63,13 +91,16 @@ function loadTrips() {
 function saveTrips() { localStorage.setItem(LS_TRIPS, JSON.stringify(trips.slice(0, 50))); }
 
 /* ---------- 요금 계산 ---------- */
-// 심야할증: 22~23시 20%, 23~02시 40%, 02~04시 20%
+function region() { return REGIONS[rates.region] || REGIONS[DEFAULT_REGION]; }
+
+// 심야할증: 지역별 시간대 테이블에서 조회
 function surchargePct(d = new Date()) {
   if (!rates.night) return 0;
   const h = d.getHours();
-  if (h === 22) return 20;
-  if (h === 23 || h < 2) return 40;
-  if (h < 4) return 20;
+  for (const [from, to, pct] of region().night) {
+    const hit = from < to ? (h >= from && h < to) : (h >= from || h < to);
+    if (hit) return pct;
+  }
   return 0;
 }
 // 미터요금: 기본요금 + 누적 단위 × 단위요금 (시내·시계외 합산)
@@ -110,20 +141,11 @@ function addDistance(dd, speedKmh) {
 }
 
 /* ---------- 시계외 판정 ---------- */
-// 서울시 행정경계 근사 폴리곤 [위도, 경도]. 경계 부근 오차 ±1~2km.
-const SEOUL = [
-  [37.701, 127.045], [37.690, 127.090], [37.660, 127.110], [37.640, 127.140],
-  [37.600, 127.180], [37.560, 127.184], [37.530, 127.180], [37.510, 127.150],
-  [37.470, 127.130], [37.450, 127.110], [37.440, 127.060], [37.428, 127.030],
-  [37.440, 126.990], [37.450, 126.940], [37.460, 126.900], [37.470, 126.860],
-  [37.490, 126.820], [37.520, 126.780], [37.560, 126.764], [37.590, 126.790],
-  [37.600, 126.830], [37.610, 126.870], [37.640, 126.900], [37.660, 126.930],
-  [37.680, 126.980], [37.695, 127.010],
-];
-function inSeoul(p) {
+// 현재 지역의 시 경계 안에 있는지 (ray casting)
+function inRegion(p, poly = region().bounds) {
   let inside = false;
-  for (let i = 0, j = SEOUL.length - 1; i < SEOUL.length; j = i++) {
-    const [yi, xi] = SEOUL[i], [yj, xj] = SEOUL[j];
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+    const [yi, xi] = poly[i], [yj, xj] = poly[j];
     if ((yi > p.lat) !== (yj > p.lat) &&
         p.lon < (xj - xi) * (p.lat - yi) / (yj - yi) + xi) inside = !inside;
   }
@@ -160,7 +182,7 @@ function onFix(pos) {
   const fix = { lat: c.latitude, lon: c.longitude, t: now };
 
   // 시계외 자동 판정 (수동 조작 전까지만)
-  if (rates.autoOut && !S.manualOut) setOutside(!inSeoul(fix));
+  if (rates.autoOut && !S.manualOut) setOutside(!inRegion(fix));
 
   if (S.lastFix) {
     const dt = (now - S.lastFix.t) / 1000;
@@ -251,7 +273,7 @@ function render() {
   el.outBtn.textContent = S.outside ? `시계외 할증 +${rates.outPct}%` : '시계외 할증';
   el.outNote.textContent = S.outside
     ? `시계외 ${(S.distOut / 1000).toFixed(2)}km 주행중`
-    : (rates.autoOut && !S.manualOut ? '서울 경계 자동 판정중' : '');
+    : (rates.autoOut && !S.manualOut ? `${region().label.split(' · ')[0]}시 경계 자동 판정중` : '');
 
   if (!S.running) {
     el.hint.textContent = S.startedAt ? '운행 종료' : `기본요금 ${won(rates.base)}원 · 기본거리 ${(rates.baseDist / 1000).toFixed(1)}km`;
@@ -415,6 +437,21 @@ function fillSettings() {
   $('s_night').checked = !!rates.night;
   $('s_autoOut').checked = !!rates.autoOut;
   $('s_sim').checked = !!rates.sim;
+  document.querySelectorAll('.seg-btn').forEach((b) => {
+    b.classList.toggle('on', b.dataset.region === rates.region);
+  });
+  $('s_nightDesc').textContent = '심야할증 자동 적용 (' + region().night
+    .map(([f, t, p]) => `${f}~${t}시 ${p}%`).join(', ') + ')';
+  $('s_autoOutDesc').textContent = `시계외 자동 판정 (${region().label.split(' · ')[0]}시 경계 · 대략)`;
+}
+
+// 지역을 고르면 해당 지역 요금표를 채워 넣는다 (숫자는 이후 직접 수정 가능)
+function pickRegion(key) {
+  if (!REGIONS[key]) return;
+  rates = { ...rates, region: key, ...REGIONS[key].fare };
+  saveRates();
+  fillSettings();
+  render();
 }
 function readSettings() {
   FIELDS.forEach((k) => {
@@ -437,6 +474,9 @@ el.outBtn.onclick = toggleOutside;
 $('openSettings').onclick = () => { fillSettings(); $('settingsOverlay').hidden = false; };
 $('s_close').onclick = () => { readSettings(); $('settingsOverlay').hidden = true; };
 $('s_reset').onclick = () => { rates = { ...DEFAULTS }; saveRates(); fillSettings(); render(); };
+document.querySelectorAll('.seg-btn').forEach((b) => {
+  b.onclick = () => pickRegion(b.dataset.region);
+});
 
 $('openHistory').onclick = () => { renderHistory(); $('historyOverlay').hidden = false; };
 $('h_close').onclick = () => { $('historyOverlay').hidden = true; };

@@ -92,7 +92,11 @@
 <div class="overlay" id="settingsOverlay" hidden>
   <div class="sheet">
     <h2>요금표 설정</h2>
-    <p class="sheet-desc">서울 중형택시 기준값입니다. 요금이 바뀌었거나 장난용으로 바꾸고 싶으면 직접 고치세요.</p>
+    <div class="seg">
+      <button class="seg-btn" data-region="seongnam">성남 · 분당</button>
+      <button class="seg-btn" data-region="seoul">서울</button>
+    </div>
+    <p class="sheet-desc">지역을 고르면 해당 요금표와 시 경계가 적용됩니다. 요금이 인상됐거나 장난용으로 바꾸고 싶으면 아래 숫자를 직접 고치세요.</p>
     <label>기본요금 (원)<input type="number" id="s_base" min="0" step="100"></label>
     <label>기본거리 (m)<input type="number" id="s_baseDist" min="0" step="100"></label>
     <label>거리요금 단위 (m당)<input type="number" id="s_unitDist" min="1" step="1"></label>
@@ -100,8 +104,8 @@
     <label>단위요금 (원)<input type="number" id="s_unitFare" min="0" step="10"></label>
     <label>시간요금 적용 속도 (km/h 미만)<input type="number" id="s_slowSpeed" min="0" step="0.01"></label>
     <label>시계외 할증률 (%)<input type="number" id="s_outPct" min="0" step="5"></label>
-    <label class="row"><input type="checkbox" id="s_night"> 심야할증 자동 적용 (22시~04시)</label>
-    <label class="row"><input type="checkbox" id="s_autoOut"> 시계외 자동 판정 (서울 경계 · 대략)</label>
+    <label class="row"><input type="checkbox" id="s_night"> <span id="s_nightDesc">심야할증 자동 적용</span></label>
+    <label class="row"><input type="checkbox" id="s_autoOut"> <span id="s_autoOutDesc">시계외 자동 판정</span></label>
     <label class="row"><input type="checkbox" id="s_sim"> 시뮬레이션 모드 (GPS 없이 가상 주행)</label>
     <div class="sheet-actions">
       <button class="btn ghost" id="s_reset">기본값 복원</button>
