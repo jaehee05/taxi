@@ -327,10 +327,18 @@ function elapsed() {
   return ((S.running ? Date.now() : S.endedAt) - S.startedAt) / 1000;
 }
 
-// 미터기의 기본거리 창. 실제 미터기처럼 숫자만 보여 준다.
+/* 미터기의 기본거리 창. 화면은 250ms마다 다시 그리지만 이 숫자는
+   실제 미터기처럼 1초에 한 번만 갱신한다 (정차 중이면 한 번에 4씩 떨어진다). */
+let hintShown = '';
+let hintAt = 0;
 function hintText() {
-  if (!S.running || baseLeft() <= 0) return '';
-  return String(Math.ceil(baseLeft()));
+  if (!S.running || baseLeft() <= 0) { hintShown = ''; return ''; }
+  const now = Date.now();
+  if (!hintShown || now - hintAt >= 1000) {
+    hintAt = now;
+    hintShown = String(Math.ceil(baseLeft()));
+  }
+  return hintShown;
 }
 
 function render() {
@@ -361,7 +369,7 @@ async function start() {
   S.dist = 0; S.distOut = 0; S.eff = 0; S.effCharged = 0; S.effOut = 0;
   S.outside = false; S.manualOut = false;
   S.speed = 0; S.lastFix = null; S.lastFixAt = Date.now();
-  lastTick = 0;
+  lastTick = 0; hintShown = ''; hintAt = 0;
 
   el.go.textContent = '운행 종료';
   el.go.classList.add('stop');
