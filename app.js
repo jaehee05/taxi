@@ -7,7 +7,7 @@ const REGIONS = {
   seongnam: {
     label: '성남 · 분당',
     plate: '08어 9766',
-    fare: { base: 4800, baseDist: 2000, unitDist: 132, unitTime: 31, unitFare: 100, outPct: 20 },
+    fare: { base: 4800, baseDist: 1600, unitDist: 132, unitTime: 31, unitFare: 100, outPct: 20 },
     night: [[0, 4, 20]],
     bounds: [
       [37.500, 127.100], [37.495, 127.135], [37.485, 127.160], [37.470, 127.185],
@@ -83,8 +83,14 @@ const el = {
 
 /* ---------- 저장소 ---------- */
 function loadRates() {
-  try { return { ...DEFAULTS, ...JSON.parse(localStorage.getItem(LS_RATES) || '{}') }; }
-  catch { return { ...DEFAULTS }; }
+  let saved = {};
+  try { saved = JSON.parse(localStorage.getItem(LS_RATES) || '{}'); } catch { /* 깨졌으면 기본값 */ }
+
+  // 성남 기본거리를 2km 로 잘못 넣었었다. 저장된 설정이 기본값보다 우선하므로
+  // 그 값을 그대로 쓰던 사람은 고쳐도 반영이 안 된다. 한 번만 바로잡는다.
+  if (saved.region === 'seongnam' && saved.baseDist === 2000) saved.baseDist = 1600;
+
+  return { ...DEFAULTS, ...saved };
 }
 function saveRates() { localStorage.setItem(LS_RATES, JSON.stringify(rates)); }
 function loadTrips() {
