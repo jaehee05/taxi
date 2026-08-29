@@ -72,8 +72,10 @@ Firebase 연결에 실패하면 앱은 자동으로 localStorage 모드로 떨�
 3. **Authentication → Settings → 승인된 도메인** 에 Vercel 배포 도메인 추가
 4. **Firestore → 규칙** 에 `firestore.rules` 배포
 
+`firebase.json` 과 `.firebaserc` 가 들어 있으므로 아래 한 줄이면 됩니다.
+
 ```bash
-npx firebase-tools deploy --only firestore:rules --project taxi-6c0c5
+npx firebase-tools deploy --only firestore:rules
 ```
 
 ### 데이터 구조
