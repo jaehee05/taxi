@@ -204,9 +204,14 @@ function meteredFare() {
 function outFare() {
   return Math.floor(S.effOut / rates.unitDist) * rates.unitFare * (rates.outPct / 100);
 }
-// 최종 요금: (미터요금 + 시계외할증)에 심야할증을 곱하고 100원 단위 반올림
+// 미터기에 찍히는 금액. 할증까지 반영하되 반올림은 하지 않는다.
+// 심야 23시라면 기본요금 4,800 × 1.3 = 6,240 이 그대로 뜬다.
+function totalFareRaw(pct = surchargePct()) {
+  return Math.round((meteredFare() + outFare()) * (1 + pct / 100));
+}
+// 실제로 받는 요금. 미터기 금액을 100원 단위로 반올림한다.
 function totalFare(pct = surchargePct()) {
-  return Math.round((meteredFare() + outFare()) * (1 + pct / 100) / 100) * 100;
+  return Math.round(totalFareRaw(pct) / 100) * 100;
 }
 
 /* ---------- 거리 ---------- */
@@ -372,7 +377,7 @@ function hintText() {
 }
 
 function render() {
-  el.fare.textContent = won(S.startedAt ? totalFare() : 0);
+  el.fare.textContent = won(S.startedAt ? totalFareRaw() : 0);
   el.dist.textContent = (S.dist / 1000).toFixed(2);
   el.time.textContent = fmtTime(elapsed());
   el.speed.textContent = Math.round(S.speed);
@@ -392,14 +397,20 @@ function render() {
 }
 
 /* ---------- 운행 ---------- */
-async function start() {
-  S.running = true;
-  S.startedAt = Date.now();
-  S.endedAt = 0;
+// 미터기를 빈차 상태로 되돌린다
+function resetMeter() {
+  S.startedAt = 0; S.endedAt = 0;
   S.dist = 0; S.distOut = 0; S.eff = 0; S.effCharged = 0; S.effOut = 0;
   S.outside = false; S.manualOut = false;
-  S.speed = 0; S.lastFix = null; S.lastFixAt = Date.now();
+  S.speed = 0; S.lastFix = null;
   lastTick = 0; hintShown = ''; hintAt = 0;
+}
+
+async function start() {
+  resetMeter();                    // 먼저 비우고
+  S.running = true;                // 그 다음 출발 상태를 세운다
+  S.startedAt = Date.now();
+  S.lastFixAt = Date.now();
 
   el.go.textContent = '운행 종료';
   el.go.classList.add('stop');
@@ -443,6 +454,9 @@ function stop() {
   };
   persistTrip(trip);
   showReceipt(trip);
+
+  // 영수증은 위에서 값을 복사해 갔으므로 미터기는 바로 비워도 된다
+  resetMeter();
   render();
 }
 
