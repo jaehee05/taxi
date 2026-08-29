@@ -419,6 +419,9 @@ function stop() {
     sec: Math.round((S.endedAt - S.startedAt) / 1000),
     dist: S.dist,
     distOut: S.distOut,
+    base: rates.base,
+    unitFare: rates.unitFare,
+    units: Math.floor(S.effCharged / rates.unitDist),
     metered: meteredFare(),
     outFare: Math.round(outFare()),
     outPct: rates.outPct,
@@ -461,11 +464,7 @@ document.addEventListener('visibilitychange', () => {
 
 /* ---------- 영수증 ---------- */
 function renderReceiptRows(t) {
-  $('rRows').innerHTML = tripRows(t)
-    .map(([k, v]) => `<div class="r-row"><span>${esc(k)}</span><span>${esc(v)}</span></div>`)
-    .join('');
-  $('rTotal').textContent = won(t.fare) + '원';
-  $('rCompany').textContent = receiptSubtitle(t);
+  renderReceiptDOM($('rPaper'), t);
 }
 
 function showReceipt(t) {

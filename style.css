@@ -148,27 +148,85 @@ body.locked{height:100dvh;overflow:hidden;touch-action:manipulation}
 }
 .btn.ghost{background:var(--panel-2);color:var(--muted);border:1px solid var(--line)}
 
-/* 영수증 */
-.receipt{background:#f6f3ea;color:#22201c;font-family:ui-monospace,"SF Mono",Menlo,monospace;border-color:#ddd6c4}
-.r-head{text-align:center;padding-bottom:14px;border-bottom:2px dashed #c9c2b0}
-.r-title{font-size:19px;font-weight:800;letter-spacing:4px}
-.r-sub{font-size:11px;color:#7a7466;margin-top:6px}
-.r-rows{padding:14px 0;font-size:13px}
-.r-row{display:flex;justify-content:space-between;gap:12px;padding:5px 0}
-.r-row span:first-child{color:#7a7466}
-.r-total{
-  display:flex;justify-content:space-between;align-items:baseline;
-  padding:14px 0;border-top:2px dashed #c9c2b0;border-bottom:2px dashed #c9c2b0;
-  font-size:15px;font-weight:800;
+/* 영수증 — 감열지 한 장 */
+.receipt{
+  background:none;border:none;padding:0;
+  width:100%;max-width:400px;max-height:88dvh;overflow-y:auto;
 }
-.r-total b{font-size:24px}
-.r-note{text-align:center;font-size:11px;color:#7a7466;padding:14px 0 0;line-height:1.7}
-.r-actions .btn.ghost{background:#e6e0d0;color:#7a7466;border-color:#d4ccb8}
+.paper{
+  --tooth:13px; --tooth-h:8px;
+  background:#fff;color:#111;
+  font-family:ui-monospace,"SF Mono",Menlo,monospace;
+  padding:calc(var(--tooth-h) + 22px) 22px calc(var(--tooth-h) + 22px);
+  -webkit-mask:
+    conic-gradient(from 135deg at top,#0000,#000 1deg 89deg,#0000 90deg)
+      top/var(--tooth) var(--tooth-h) repeat-x,
+    conic-gradient(from -45deg at bottom,#0000,#000 1deg 89deg,#0000 90deg)
+      bottom/var(--tooth) var(--tooth-h) repeat-x,
+    linear-gradient(#000 0 0) center/100% calc(100% - var(--tooth-h)*2) no-repeat;
+  mask:
+    conic-gradient(from 135deg at top,#0000,#000 1deg 89deg,#0000 90deg)
+      top/var(--tooth) var(--tooth-h) repeat-x,
+    conic-gradient(from -45deg at bottom,#0000,#000 1deg 89deg,#0000 90deg)
+      bottom/var(--tooth) var(--tooth-h) repeat-x,
+    linear-gradient(#000 0 0) center/100% calc(100% - var(--tooth-h)*2) no-repeat;
+}
+.rc-head{display:flex;align-items:flex-start;justify-content:space-between;gap:10px}
+.rc-logo{
+  font-family:-apple-system,"Apple SD Gothic Neo",system-ui,sans-serif;
+  font-size:26px;font-weight:800;letter-spacing:-1px;white-space:nowrap;
+}
+.rc-biz{font-size:10px;line-height:1.55;text-align:right}
+.rc-when{font-size:12px;margin-top:12px}
+.rc-sep{border-top:1.5px dashed #111;margin:10px 0}
+
+.ln{display:flex;justify-content:space-between;gap:8px;font-size:12px;padding:2px 0}
+.ln b{font-weight:400}
+.ln.cols{padding:0 0 0 8px}
+.ln.cols span:nth-child(2){flex:1;text-align:center}
+.ln.nm{padding-left:8px}
+.ln.qty{padding-left:8px}
+.ln.qty span:first-child{margin-left:auto;min-width:64px;text-align:right}
+.ln.qty span:nth-child(2){min-width:34px;text-align:right}
+.ln.qty b{min-width:70px;text-align:right}
+.rc-items .ln:not(.nm):not(.qty){padding-left:8px}
+.rc-items .ln:not(.nm) b{text-align:right}
+
+.rc-total{display:flex;justify-content:space-between;align-items:baseline;padding:4px 0}
+.rc-total span{
+  font-family:-apple-system,"Apple SD Gothic Neo",system-ui,sans-serif;
+  font-size:23px;font-weight:800;letter-spacing:14px;
+}
+.rc-total b{font-size:25px;font-weight:800}
+.rc-info .ln{font-size:12px;padding-left:8px}
+.rc-note{font-size:12px;padding:2px 0 0}
+.rc-bars{display:block;width:100%;height:44px;margin:16px 0 6px;fill:#111}
+.rc-code{text-align:center;font-size:13px;letter-spacing:.5px}
+
+/* 손님 지정 (영수증 아래) */
+.r-guest{display:flex;align-items:center;gap:10px;padding:14px 2px 0}
+.r-guest-label{font-size:12px;color:var(--muted);flex:none}
+.r-guest-chips{display:flex;flex-wrap:wrap;gap:5px}
+.chip{
+  padding:6px 11px;border-radius:999px;border:1px solid var(--line);background:var(--panel-2);
+  color:var(--muted);font-size:12px;font-weight:700;font-family:inherit;cursor:pointer;
+}
+.chip.on{background:var(--amber);border-color:var(--amber);color:#1a1200}
+.chip.add{background:none;border-style:dashed}
+.guest-input{
+  width:100%;padding:8px 11px;border-radius:9px;
+  border:1px solid var(--line);background:var(--panel-2);color:var(--text);
+  font-size:13px;font-family:inherit;
+}
+.guest-input:focus{outline:none;border-color:var(--amber-dim)}
+
+.r-actions{display:flex;gap:10px;margin-top:14px}
+.r-alts{display:flex;gap:8px;margin-top:8px}
 .r-alt{
-  display:block;width:100%;margin-top:10px;padding:9px;border:none;background:none;
-  color:#9a9384;font-size:12px;font-weight:700;font-family:inherit;cursor:pointer;
+  flex:1;padding:9px;border:none;border-radius:9px;background:none;
+  color:var(--muted);font-size:12px;font-weight:700;font-family:inherit;cursor:pointer;
 }
-.r-alt:active{color:#22201c}
+.r-alt:active{color:var(--text)}
 
 /* 기록 */
 .history{display:flex;flex-direction:column;gap:8px;max-height:46dvh;overflow-y:auto}
@@ -187,9 +245,6 @@ body.locked{height:100dvh;overflow:hidden;touch-action:manipulation}
 .tag{font-size:10px;font-weight:700;color:var(--amber);background:rgba(255,176,32,.12);border-radius:5px;padding:2px 5px;vertical-align:middle}
 
 /* 손님 지정 (영수증) */
-.r-guest{display:flex;align-items:center;gap:10px;padding:12px 0 2px;border-bottom:1px dashed #d9d2c0}
-.r-guest-label{font-size:12px;color:#7a7466;flex:none}
-.r-guest-chips{display:flex;flex-wrap:wrap;gap:5px;padding-bottom:10px}
 .chip{
   padding:6px 11px;border-radius:999px;border:1px solid #d4ccb8;background:#ece6d6;
   color:#5f5a4e;font-size:12px;font-weight:700;font-family:inherit;cursor:pointer;
@@ -202,8 +257,6 @@ body.locked{height:100dvh;overflow:hidden;touch-action:manipulation}
 }
 .guest-input:focus{outline:none;border-color:#22201c}
 
-.r-alts{display:flex;gap:8px;margin-top:8px}
-.r-alts .r-alt{flex:1;margin-top:0}
 
 /* 클라우드 상태 (설정) */
 .cloud{
@@ -247,5 +300,5 @@ body.locked{height:100dvh;overflow:hidden;touch-action:manipulation}
   min-height:100dvh;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;
   padding:calc(env(safe-area-inset-top) + 24px) 18px calc(env(safe-area-inset-bottom) + 24px);
 }
-.pub .receipt{max-width:430px}
+.pub .receipt{max-width:400px}
 .pub-msg{color:var(--muted);font-size:14px;text-align:center;line-height:1.6}

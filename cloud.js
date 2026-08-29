@@ -46,8 +46,9 @@ try {
   const tripsRef = (uid) => collection(db, 'users', uid, 'trips');
 
   // 규칙의 화이트리스트와 어긋나면 쓰기가 통째로 거부되므로 여기서 한 번 걸러 낸다
-  const TRIP_KEYS = ['startedAt', 'endedAt', 'sec', 'dist', 'distOut', 'metered',
-    'outFare', 'outPct', 'surcharge', 'fare', 'region', 'plate', 'passenger', 'settled'];
+  const TRIP_KEYS = ['startedAt', 'endedAt', 'sec', 'dist', 'distOut',
+    'base', 'unitFare', 'units', 'metered', 'outFare', 'outPct',
+    'surcharge', 'fare', 'region', 'plate', 'passenger', 'settled'];
   function clean(t) {
     const out = {};
     for (const k of TRIP_KEYS) if (t[k] !== undefined) out[k] = t[k];

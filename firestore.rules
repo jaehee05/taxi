@@ -17,8 +17,9 @@ service cloud.firestore {
     function validTrip(d) {
       return d.keys().hasOnly([
                'startedAt', 'endedAt', 'sec', 'dist', 'distOut',
-               'metered', 'outFare', 'outPct', 'surcharge', 'fare',
-               'region', 'plate', 'passenger', 'settled', 'createdAt'
+               'base', 'unitFare', 'units', 'metered', 'outFare', 'outPct',
+               'surcharge', 'fare', 'region', 'plate', 'passenger',
+               'settled', 'createdAt'
              ])
              && d.keys().hasAll(['startedAt', 'endedAt', 'sec', 'dist', 'fare'])
              && d.startedAt is number && d.startedAt > 0
@@ -27,6 +28,9 @@ service cloud.firestore {
              && d.dist is number && d.dist >= 0 && d.dist <= 2000000
              && d.fare is number && d.fare >= 0 && d.fare <= 100000000
              && (!('distOut' in d) || (d.distOut is number && d.distOut >= 0 && d.distOut <= d.dist))
+             && (!('base' in d) || d.base is number)
+             && (!('unitFare' in d) || d.unitFare is number)
+             && (!('units' in d) || (d.units is number && d.units >= 0 && d.units <= 100000))
              && (!('metered' in d) || d.metered is number)
              && (!('outFare' in d) || d.outFare is number)
              && (!('outPct' in d) || d.outPct is number)

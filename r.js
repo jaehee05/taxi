@@ -9,11 +9,7 @@ function receiptId() {
 }
 
 function show(t) {
-  $('rRows').innerHTML = tripRows(t)
-    .map(([k, v]) => `<div class="r-row"><span>${esc(k)}</span><span>${esc(v)}</span></div>`)
-    .join('');
-  $('rTotal').textContent = won(t.fare) + '원';
-  $('rCompany').textContent = receiptSubtitle(t);
+  renderReceiptDOM($('rPaper'), t);
   $('msg').hidden = true;
   $('card').hidden = false;
   document.title = `택시 영수증 · ${won(t.fare)}원`;
