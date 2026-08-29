@@ -340,16 +340,21 @@ function elapsed() {
   return ((S.running ? Date.now() : S.endedAt) - S.startedAt) / 1000;
 }
 
-/* 미터기의 기본거리 창. 화면은 250ms마다 다시 그리지만 이 숫자는
+/* 미터기의 거리 창. 기본거리를 다 쓰기 전에는 남은 기본거리를,
+   그 뒤로는 다음 100원까지 남은 거리를 보여 준다. 0에 닿으면 요금이
+   오르고 다시 채워진다. 화면은 250ms마다 다시 그리지만 이 숫자는
    실제 미터기처럼 1초에 한 번만 갱신한다 (정차 중이면 한 번에 4씩 떨어진다). */
 let hintShown = '';
 let hintAt = 0;
 function hintText() {
-  if (!S.running || baseLeft() <= 0) { hintShown = ''; return ''; }
+  if (!S.running) { hintShown = ''; return ''; }
   const now = Date.now();
   if (!hintShown || now - hintAt >= 1000) {
     hintAt = now;
-    hintShown = String(Math.ceil(baseLeft()));
+    const left = baseLeft() > 0
+      ? baseLeft()
+      : rates.unitDist - (S.effCharged % rates.unitDist);
+    hintShown = String(Math.ceil(left));
   }
   return hintShown;
 }
