@@ -7,8 +7,8 @@ const REGIONS = {
   seongnam: {
     label: '성남 · 분당',
     plate: '08어 9766',
-    fare: { base: 4800, baseDist: 1600, unitDist: 132, unitTime: 31, unitFare: 100, outPct: 20 },
-    night: [[0, 4, 20]],
+    fare: { base: 4800, baseDist: 1600, unitDist: 131, unitTime: 30, unitFare: 100, outPct: 20 },
+    night: [[23, 4, 30]],          // 성남은 시간대 불문 일괄 30%
     bounds: [
       [37.500, 127.100], [37.495, 127.135], [37.485, 127.160], [37.470, 127.185],
       [37.450, 127.200], [37.430, 127.210], [37.405, 127.200], [37.385, 127.185],
@@ -21,7 +21,7 @@ const REGIONS = {
     label: '서울',
     plate: '08어 9766',
     fare: { base: 4800, baseDist: 1600, unitDist: 131, unitTime: 30, unitFare: 100, outPct: 20 },
-    night: [[22, 23, 20], [23, 2, 40], [2, 4, 20]],
+    night: [[22, 23, 20], [23, 2, 40], [2, 4, 20]],   // 서울은 피크(23~02시) 40%
     bounds: [
       [37.701, 127.045], [37.690, 127.090], [37.660, 127.110], [37.640, 127.140],
       [37.600, 127.180], [37.560, 127.184], [37.530, 127.180], [37.510, 127.150],
@@ -86,9 +86,15 @@ function loadRates() {
   let saved = {};
   try { saved = JSON.parse(localStorage.getItem(LS_RATES) || '{}'); } catch { /* 깨졌으면 기본값 */ }
 
-  // 성남 기본거리를 2km 로 잘못 넣었었다. 저장된 설정이 기본값보다 우선하므로
-  // 그 값을 그대로 쓰던 사람은 고쳐도 반영이 안 된다. 한 번만 바로잡는다.
-  if (saved.region === 'seongnam' && saved.baseDist === 2000) saved.baseDist = 1600;
+  /* 성남 요금표를 2km / 132m / 31초로 잘못 넣었었다. 실제 분당 미터기는
+     서울과 같은 1.6km / 131m / 30초다. 저장된 설정이 기본값보다 우선하므로
+     상수만 고치면 이미 쓰던 사람에게는 반영되지 않는다. 잘못된 값을
+     그대로 쓰고 있는 경우만 골라 한 번 바로잡는다. */
+  if (saved.region === 'seongnam') {
+    if (saved.baseDist === 2000) saved.baseDist = 1600;
+    if (saved.unitDist === 132) saved.unitDist = 131;
+    if (saved.unitTime === 31) saved.unitTime = 30;
+  }
 
   return { ...DEFAULTS, ...saved };
 }
@@ -186,7 +192,7 @@ function surchargePct(d = new Date()) {
 }
 // 시간요금이 붙기 시작하는 속도. 단위요금이 같은 이상 거리 단가와 시간 단가는
 // 같은 지점에서 만나므로, 별도 설정값이 아니라 두 단위에서 유도된다.
-// 예: 132m / 31초 = 4.26m/s = 15.33km/h
+// 예: 131m / 30초 = 4.37m/s = 15.72km/h
 function mps() { return rates.unitDist / rates.unitTime; }
 function slowSpeed() { return mps() * 3.6; }
 
