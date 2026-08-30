@@ -27,9 +27,13 @@
   <main class="meter">
     <div class="fare-wrap">
       <div class="fare-label">요금</div>
-      <div class="fare" id="fare">0</div>
-      <div class="fare-unit">원</div>
+      <div class="fare-row">
+        <div class="fare" id="fare">0</div>
+        <div class="fare-unit">원</div>
+      </div>
     </div>
+
+    <div class="hint" id="hint"></div>
 
     <div class="stats">
       <div class="stat">
@@ -45,16 +49,15 @@
         <div class="stat-key">속도 (km/h)</div>
       </div>
     </div>
+  </main>
 
-    <div class="hint" id="hint">기본요금 구간 (1.6km)</div>
-
+  <div class="controls">
     <div class="out">
       <button class="out-btn" id="outBtn">시계외 할증</button>
       <div class="out-note" id="outNote"></div>
     </div>
-  </main>
-
-  <button class="go" id="go">운행 시작</button>
+    <button class="go" id="go">운행 시작</button>
+  </div>
 
   <footer class="bottombar">
     <button class="link" id="openHistory">기록</button>

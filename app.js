@@ -378,6 +378,8 @@ function hintText() {
 
 function render() {
   el.fare.textContent = won(S.startedAt ? totalFareRaw() : 0);
+  // 꺼진 세그먼트가 비쳐 보이는 미터기 흉내. 자릿수·쉼표 위치를 그대로 따라간다.
+  el.fare.dataset.ghost = el.fare.textContent.replace(/\d/g, '8');
   el.dist.textContent = (S.dist / 1000).toFixed(2);
   el.time.textContent = fmtTime(elapsed());
   el.speed.textContent = Math.round(S.speed);
