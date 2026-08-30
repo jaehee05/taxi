@@ -2,35 +2,22 @@
 
 /* 지역별 요금 체계와 시 경계.
    심야할증 구간은 [시작시, 끝시, 할증률]. 끝시가 시작시보다 작으면 자정을 넘긴 구간.
-   경계 폴리곤은 [위도, 경도] 근사치로, 경계 부근 1~2km 오차가 있음. */
+   경계 폴리곤은 bounds.js 에 통계청 행정경계에서 뽑아 둔 것을 쓴다. */
+const BOUNDS = window.REGION_BOUNDS || {};
 const REGIONS = {
   seongnam: {
     label: '성남 · 분당',
     plate: '08어 9766',
     fare: { base: 4800, baseDist: 1600, unitDist: 131, unitTime: 30, unitFare: 100, outPct: 20 },
     night: [[23, 4, 30]],          // 성남은 시간대 불문 일괄 30%
-    bounds: [
-      [37.500, 127.100], [37.495, 127.135], [37.485, 127.160], [37.470, 127.185],
-      [37.450, 127.200], [37.430, 127.210], [37.405, 127.200], [37.385, 127.185],
-      [37.360, 127.165], [37.340, 127.140], [37.325, 127.115], [37.330, 127.090],
-      [37.345, 127.075], [37.365, 127.065], [37.390, 127.055], [37.415, 127.050],
-      [37.440, 127.055], [37.460, 127.065], [37.480, 127.080], [37.492, 127.090],
-    ],
+    bounds: BOUNDS.seongnam || [],
   },
   seoul: {
     label: '서울',
     plate: '08어 9766',
     fare: { base: 4800, baseDist: 1600, unitDist: 131, unitTime: 30, unitFare: 100, outPct: 20 },
     night: [[22, 23, 20], [23, 2, 40], [2, 4, 20]],   // 서울은 피크(23~02시) 40%
-    bounds: [
-      [37.701, 127.045], [37.690, 127.090], [37.660, 127.110], [37.640, 127.140],
-      [37.600, 127.180], [37.560, 127.184], [37.530, 127.180], [37.510, 127.150],
-      [37.470, 127.130], [37.450, 127.110], [37.440, 127.060], [37.428, 127.030],
-      [37.440, 126.990], [37.450, 126.940], [37.460, 126.900], [37.470, 126.860],
-      [37.490, 126.820], [37.520, 126.780], [37.560, 126.764], [37.590, 126.790],
-      [37.600, 126.830], [37.610, 126.870], [37.640, 126.900], [37.660, 126.930],
-      [37.680, 126.980], [37.695, 127.010],
-    ],
+    bounds: BOUNDS.seoul || [],
   },
 };
 const DEFAULT_REGION = 'seongnam';
@@ -60,6 +47,7 @@ const S = {
   effOut: 0,        // 그중 시계외에서 쌓인 몫
   outside: false,   // 현재 시계외 여부
   manualOut: false, // 사용자가 직접 조작 → 자동 판정 중단
+  originIn: null,   // 승차 지점이 시 경계 안이었나 (첫 GPS 신호로 한 번만 판정)
   speed: 0,         // 현재 속도 (km/h)
   lastFix: null,    // {lat, lon, t}
   lastFixAt: 0,     // GPS 마지막 수신 시각
@@ -247,6 +235,11 @@ function addDistance(dd, speedKmh) {
 function baseLeft() { return Math.max(0, rates.baseDist - S.eff); }
 
 /* ---------- 시계외 판정 ---------- */
+/* 시계외 할증은 관내에서 태워 관외로 나갈 때 붙는 것이다. 빈 차로 돌아올
+   거리를 보전해 주는 명목이라, 애초에 시외에서 승차했으면 어디로 가든
+   붙지 않는다. 그래서 승차 지점이 경계 밖이면 (S.originIn === false)
+   자동 판정은 그 운행 내내 손을 떼고, 버튼으로만 켤 수 있다. */
+
 // 현재 지역의 시 경계 안에 있는지 (ray casting)
 function inRegion(p, poly = region().bounds) {
   let inside = false;
@@ -287,8 +280,11 @@ function onFix(pos) {
 
   const fix = { lat: c.latitude, lon: c.longitude, t: now };
 
-  // 시계외 자동 판정 (수동 조작 전까지만)
-  if (rates.autoOut && !S.manualOut) setOutside(!inRegion(fix));
+  // 승차 지점이 시 경계 안이었는지 첫 신호로 한 번만 정한다.
+  if (S.running && S.originIn === null) S.originIn = inRegion(fix);
+
+  // 시계외 자동 판정 (시외 출발이 아니고, 손으로 만지기 전까지만)
+  if (rates.autoOut && !S.manualOut && S.originIn) setOutside(!inRegion(fix));
 
   if (S.lastFix) {
     const dt = (now - S.lastFix.t) / 1000;
@@ -376,6 +372,15 @@ function hintText() {
   return hintShown;
 }
 
+/* 시계외 버튼 옆 작은 글씨. 지금 왜 이 상태인지 드러낸다.
+   자동 판정이 일하고 있는지 보이지 않으면 고장과 구별할 수가 없다. */
+function outNote() {
+  if (S.outside) return `${(S.distOut / 1000).toFixed(2)}km`;
+  if (!rates.autoOut || S.manualOut) return '';
+  if (S.originIn === false) return '시외 출발';
+  return S.running ? '자동 판정중' : '';
+}
+
 function render() {
   el.fare.textContent = won(S.startedAt ? totalFareRaw() : 0);
   // 꺼진 세그먼트가 비쳐 보이는 미터기 흉내. 자릿수·쉼표 위치를 그대로 따라간다.
@@ -390,7 +395,7 @@ function render() {
 
   el.outBtn.classList.toggle('on', S.outside);
   el.outBtn.textContent = S.outside ? `시계외 할증 +${rates.outPct}%` : '시계외 할증';
-  el.outNote.textContent = S.outside ? `${(S.distOut / 1000).toFixed(2)}km` : '';
+  el.outNote.textContent = outNote();
 
   el.hint.textContent = hintText();
 
@@ -403,7 +408,7 @@ function render() {
 function resetMeter() {
   S.startedAt = 0; S.endedAt = 0;
   S.dist = 0; S.distOut = 0; S.eff = 0; S.effCharged = 0; S.effOut = 0;
-  S.outside = false; S.manualOut = false;
+  S.outside = false; S.manualOut = false; S.originIn = null;
   S.speed = 0; S.lastFix = null;
   lastTick = 0; hintShown = ''; hintAt = 0;
 }
